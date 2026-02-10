@@ -66,7 +66,12 @@ export default function StudentDashboard() {
                     ...doc.data(),
                 }));
 
-                setAvailableExams(exams);
+                // Filter to only show public exams
+                const publicExams = exams.filter(
+                    (exam) => exam.visibility === "public",
+                );
+
+                setAvailableExams(publicExams);
 
                 // Fetch exam details for completed exams
                 if (studentSnap.exists()) {

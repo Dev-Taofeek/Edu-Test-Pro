@@ -9,45 +9,370 @@ import {
     Ban,
     CheckCircle,
     Download,
+    X,
+    BookOpen,
+    Clock,
+    Award,
+    Phone,
+    Hash,
+    Calendar,
+    TrendingUp,
+    TrendingDown,
+    Minus,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/app/context/AuthContext";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
+import { useAdminExams } from "@/hooks/useAdminExams";
 import { doc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Toast } from "@/components/ui/Toast";
 
-export default function ManageStudents({ currentAdminId }) {
-    const { students, loading } = useAdminStudents(currentAdminId);
+// ── Student Detail Modal ──────────────────────────────────────────────────────
+function StudentDetailModal({ student, adminExams, onClose }) {
+    if (!student) return null;
+
+    const avgScore =
+        student.examsTaken && student.examsTaken.length > 0
+            ? Math.round(
+                  student.examsTaken.reduce((acc, e) => acc + e.score, 0) /
+                      student.examsTaken.length,
+              )
+            : null;
+
+    // Cross-reference admin exams with student's examsTaken
+    const examRows = adminExams.map((exam) => {
+        const taken = student.examsTaken?.find((t) => t.examId === exam.id);
+        return {
+            id: exam.id,
+            title: exam.title,
+            course: exam.course || "—",
+            duration: exam.duration,
+            totalQuestions: exam.totalQuestions,
+            taken: !!taken,
+            score: taken?.score ?? null,
+            dateTaken: taken?.dateTaken || taken?.completedAt || null,
+        };
+    });
+
+    const takenExams = examRows.filter((e) => e.taken);
+    const notTakenExams = examRows.filter((e) => !e.taken);
+
+    const getScoreBadge = (score) => {
+        if (score === null)
+            return {
+                bg: "bg-gray-100",
+                text: "text-gray-500",
+                label: "Not taken",
+            };
+        if (score >= 70)
+            return {
+                bg: "bg-green-100",
+                text: "text-green-700",
+                label: `${score}%`,
+            };
+        if (score >= 50)
+            return {
+                bg: "bg-yellow-100",
+                text: "text-yellow-700",
+                label: `${score}%`,
+            };
+        return { bg: "bg-red-100", text: "text-red-700", label: `${score}%` };
+    };
+
+    const getScoreBar = (score) => {
+        if (score >= 70) return "bg-green-500";
+        if (score >= 50) return "bg-yellow-500";
+        return "bg-red-500";
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{
+                backgroundColor: "rgba(0,0,0,0.55)",
+                backdropFilter: "blur(4px)",
+            }}
+            onClick={(e) => e.target === e.currentTarget && onClose()}
+        >
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Header strip */}
+                <div className="bg-green-900 px-6 py-5 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center text-white text-2xl font-bold">
+                            {student.firstName?.charAt(0) ||
+                                student.name?.charAt(0) ||
+                                "?"}
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white">
+                                {student.name ||
+                                    `${student.firstName} ${student.lastName}`}
+                            </h2>
+                            <p className="text-green-200 text-sm">
+                                {student.matricNo || "No matric number"}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-colors cursor-pointer"
+                    >
+                        <X className="h-5 w-5 text-white" />
+                    </button>
+                </div>
+
+                {/* Scrollable body */}
+                <div className="overflow-y-auto flex-1 p-6 space-y-6">
+                    {/* Quick stats row */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 text-center">
+                            <p className="text-2xl font-bold text-blue-700">
+                                {takenExams.length}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Exams Taken
+                            </p>
+                        </div>
+                        <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 text-center">
+                            <p className="text-2xl font-bold text-purple-700">
+                                {avgScore !== null ? `${avgScore}%` : "—"}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Avg Score
+                            </p>
+                        </div>
+                        <div
+                            className={`rounded-2xl p-4 text-center border ${
+                                student.status === "active"
+                                    ? "bg-green-50 border-green-100"
+                                    : "bg-gray-50 border-gray-200"
+                            }`}
+                        >
+                            <p
+                                className={`text-2xl font-bold capitalize ${
+                                    student.status === "active"
+                                        ? "text-green-700"
+                                        : "text-gray-600"
+                                }`}
+                            >
+                                {student.status || "—"}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">Status</p>
+                        </div>
+                    </div>
+
+                    {/* Personal info */}
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">
+                            Personal Information
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {[
+                                {
+                                    icon: Mail,
+                                    label: "Email",
+                                    value: student.email,
+                                },
+                                {
+                                    icon: Phone,
+                                    label: "Phone",
+                                    value: student.phone || "—",
+                                },
+                                {
+                                    icon: Hash,
+                                    label: "Matric No",
+                                    value: student.matricNo || "—",
+                                },
+                                {
+                                    icon: Calendar,
+                                    label: "Joined",
+                                    value:
+                                        student.createdAt
+                                            ?.toDate?.()
+                                            .toLocaleDateString() ||
+                                        student.joinedAt ||
+                                        "—",
+                                },
+                            ].map(({ icon: Icon, label, value }) => (
+                                <div
+                                    key={label}
+                                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl"
+                                >
+                                    <div className="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
+                                        <Icon className="h-4 w-4 text-gray-600" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-xs text-gray-500">
+                                            {label}
+                                        </p>
+                                        <p className="text-sm font-semibold text-gray-900 truncate">
+                                            {value}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Exams taken */}
+                    {takenExams.length > 0 && (
+                        <div>
+                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">
+                                Exams Taken ({takenExams.length})
+                            </h3>
+                            <div className="space-y-3">
+                                {takenExams.map((exam) => {
+                                    const badge = getScoreBadge(exam.score);
+                                    return (
+                                        <div
+                                            key={exam.id}
+                                            className="border-2 border-gray-100 hover:border-green-200 rounded-2xl p-4 transition-colors"
+                                        >
+                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-gray-900 truncate">
+                                                        {exam.title}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">
+                                                        {exam.course} ·{" "}
+                                                        {exam.totalQuestions}{" "}
+                                                        questions ·{" "}
+                                                        {exam.duration} mins
+                                                    </p>
+                                                </div>
+                                                <span
+                                                    className={`shrink-0 px-3 py-1 rounded-lg text-sm font-bold ${badge.bg} ${badge.text}`}
+                                                >
+                                                    {badge.label}
+                                                </span>
+                                            </div>
+                                            {exam.score !== null && (
+                                                <div>
+                                                    <div className="w-full bg-gray-100 rounded-full h-2">
+                                                        <div
+                                                            className={`h-2 rounded-full transition-all duration-500 ${getScoreBar(exam.score)}`}
+                                                            style={{
+                                                                width: `${exam.score}%`,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="flex justify-between mt-1">
+                                                        <span
+                                                            className={`text-xs font-semibold ${exam.score >= 50 ? "text-green-600" : "text-red-600"}`}
+                                                        >
+                                                            {exam.score >= 50
+                                                                ? "Passed"
+                                                                : "Failed"}
+                                                        </span>
+                                                        {exam.dateTaken && (
+                                                            <span className="text-xs text-gray-400">
+                                                                {new Date(
+                                                                    exam.dateTaken?.toDate?.() ||
+                                                                        exam.dateTaken,
+                                                                ).toLocaleDateString()}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Exams not taken */}
+                    {notTakenExams.length > 0 && (
+                        <div>
+                            <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">
+                                Pending Exams ({notTakenExams.length})
+                            </h3>
+                            <div className="space-y-2">
+                                {notTakenExams.map((exam) => (
+                                    <div
+                                        key={exam.id}
+                                        className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-xl opacity-60"
+                                    >
+                                        <div className="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center shrink-0">
+                                            <BookOpen className="h-4 w-4 text-gray-500" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-gray-700 truncate">
+                                                {exam.title}
+                                            </p>
+                                            <p className="text-xs text-gray-400">
+                                                {exam.course} ·{" "}
+                                                {exam.totalQuestions} questions
+                                            </p>
+                                        </div>
+                                        <span className="shrink-0 px-2 py-1 bg-gray-200 text-gray-500 rounded-lg text-xs font-semibold">
+                                            Not taken
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {adminExams.length === 0 && (
+                        <div className="text-center py-8 text-gray-400">
+                            <BookOpen className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No exams created yet</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-gray-100 flex justify-end shrink-0">
+                    <button
+                        onClick={onClose}
+                        className="px-5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors cursor-pointer text-sm"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function ManageStudents() {
+    const { user } = useAuth();
+    const { students, loading } = useAdminStudents(user?.uid);
+    const { exams: adminExams, loading: examsLoading } = useAdminExams(
+        user?.uid,
+    );
     const [searchQuery, setSearchQuery] = useState("");
     const [filterStatus, setFilterStatus] = useState("all");
     const [updatingStatus, setUpdatingStatus] = useState(null);
     const [toast, setToast] = useState(null);
+    const [selectedStudent, setSelectedStudent] = useState(null);
 
-    // Show toast notification
     const showToast = (message, type = "success") => {
         setToast({ message, type });
     };
 
-    // Toggle student status
     const toggleStudentStatus = async (studentId, currentStatus) => {
+        if (!user?.uid) return;
         setUpdatingStatus(studentId);
         try {
             const newStatus =
                 currentStatus === "active" ? "inactive" : "active";
             const studentRef = doc(db, "students", studentId);
             const now = Timestamp.now();
-
             await updateDoc(studentRef, {
                 status: newStatus,
                 statusHistory: arrayUnion({
                     status: newStatus,
-                    changedBy: currentAdminId,
+                    changedBy: user.uid,
                     changedAt: now,
                 }),
                 lastUpdated: now,
             });
-
             showToast(
                 `Student ${newStatus === "active" ? "activated" : "deactivated"} successfully!`,
                 "success",
@@ -63,20 +388,16 @@ export default function ManageStudents({ currentAdminId }) {
         }
     };
 
-    // Calculate stats using useMemo for performance
     const stats = useMemo(() => {
-        // Calculate average score from all exams taken by all students
         const allScores = students.flatMap(
             (student) => student.examsTaken?.map((exam) => exam.score) || [],
         );
-
         const averageScore = allScores.length
             ? Math.round(
                   allScores.reduce((acc, score) => acc + score, 0) /
                       allScores.length,
               )
             : 0;
-
         return {
             totalStudents: students.length,
             activeStudents: students.filter((s) => s.status === "active")
@@ -87,7 +408,6 @@ export default function ManageStudents({ currentAdminId }) {
         };
     }, [students]);
 
-    // Filter students based on search and status
     const filteredStudents = useMemo(() => {
         return students.filter((student) => {
             const matchesSearch =
@@ -103,10 +423,8 @@ export default function ManageStudents({ currentAdminId }) {
                 `${student.firstName} ${student.lastName}`
                     ?.toLowerCase()
                     .includes(searchQuery.toLowerCase());
-
             const matchesStatus =
                 filterStatus === "all" || student.status === filterStatus;
-
             return matchesSearch && matchesStatus;
         });
     }, [students, searchQuery, filterStatus]);
@@ -115,6 +433,17 @@ export default function ManageStudents({ currentAdminId }) {
         status === "active"
             ? "bg-green-100 text-green-700"
             : "bg-gray-100 text-gray-700";
+
+    if (!user) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-green-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-700 font-semibold">Loading...</p>
+                </div>
+            </div>
+        );
+    }
 
     if (loading) {
         return (
@@ -129,7 +458,16 @@ export default function ManageStudents({ currentAdminId }) {
 
     return (
         <div className="space-y-6">
-            {/* Toast Notification */}
+            {/* Modal */}
+            {selectedStudent && (
+                <StudentDetailModal
+                    student={selectedStudent}
+                    adminExams={adminExams}
+                    onClose={() => setSelectedStudent(null)}
+                />
+            )}
+
+            {/* Toast */}
             {toast && (
                 <Toast
                     message={toast.message}
@@ -167,7 +505,6 @@ export default function ManageStudents({ currentAdminId }) {
                         </div>
                     </div>
                 </Card>
-
                 <Card className="p-6 bg-white border border-gray-200 rounded-2xl">
                     <div className="flex items-center justify-between">
                         <div>
@@ -181,7 +518,6 @@ export default function ManageStudents({ currentAdminId }) {
                         </div>
                     </div>
                 </Card>
-
                 <Card className="p-6 bg-white border border-gray-200 rounded-2xl">
                     <div className="flex items-center justify-between">
                         <div>
@@ -197,7 +533,6 @@ export default function ManageStudents({ currentAdminId }) {
                         </div>
                     </div>
                 </Card>
-
                 <Card className="p-6 bg-white border border-gray-200 rounded-2xl">
                     <div className="flex items-center justify-between">
                         <div>
@@ -228,7 +563,6 @@ export default function ManageStudents({ currentAdminId }) {
                             className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-900 focus:border-transparent"
                         />
                     </div>
-
                     <div className="flex gap-2">
                         {["all", "active", "inactive"].map((status) => (
                             <button
@@ -245,15 +579,6 @@ export default function ManageStudents({ currentAdminId }) {
                             </button>
                         ))}
                     </div>
-
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer font-semibold whitespace-nowrap"
-                    >
-                        <Download className="mr-2 h-4 w-4" />
-                        Export
-                    </Button>
                 </div>
             </Card>
 
@@ -360,18 +685,27 @@ export default function ManageStudents({ currentAdminId }) {
                                         <Button
                                             size="sm"
                                             className="bg-green-900 hover:bg-green-800 text-white font-semibold cursor-pointer"
+                                            onClick={() =>
+                                                setSelectedStudent(student)
+                                            }
                                         >
                                             <Eye className="mr-2 h-4 w-4" />
                                             View Details
                                         </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold cursor-pointer"
+                                        <a
+                                            href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(student.email)}&su=${encodeURIComponent(`Message from Admin`)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
                                         >
-                                            <Mail className="mr-2 h-4 w-4" />
-                                            Send Email
-                                        </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold cursor-pointer"
+                                            >
+                                                <Mail className="mr-2 h-4 w-4" />
+                                                Send Email
+                                            </Button>
+                                        </a>
                                         {student.status === "active" ? (
                                             <Button
                                                 size="sm"

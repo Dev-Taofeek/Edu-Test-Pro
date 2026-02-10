@@ -93,17 +93,31 @@ export default function LoginPage() {
             setShowSuccessModal(true);
         } catch (err) {
             console.error("Login error:", err);
-            let errorMessage = err.message;
+            let errorMessage = "An error occurred. Please try again.";
+
             if (err.code === "auth/user-not-found") {
-                errorMessage = "No account found with this email";
+                errorMessage = "Email or password is incorrect";
             } else if (err.code === "auth/wrong-password") {
-                errorMessage = "Incorrect password";
+                errorMessage = "Email or password is incorrect";
             } else if (err.code === "auth/invalid-email") {
-                errorMessage = "Invalid email address";
+                errorMessage = "Please enter a valid email address";
+            } else if (err.code === "auth/invalid-credential") {
+                errorMessage = "Email or password is incorrect";
             } else if (err.code === "auth/too-many-requests") {
                 errorMessage =
-                    "Too many failed attempts. Please try again later";
+                    "Too many failed login attempts. Please try again in a few minutes";
+            } else if (err.code === "auth/network-request-failed") {
+                errorMessage =
+                    "Network error. Please check your internet connection";
+            } else if (err.code === "auth/user-disabled") {
+                errorMessage =
+                    "This account has been disabled. Please contact support";
+            } else if (err.message.includes("role")) {
+                errorMessage = err.message; // Keep role mismatch message as is
+            } else if (err.message.includes("User record not found")) {
+                errorMessage = "Account not found. Please register first";
             }
+
             setError(errorMessage);
         } finally {
             setIsLoading(false);

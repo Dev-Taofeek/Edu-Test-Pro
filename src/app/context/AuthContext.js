@@ -11,7 +11,6 @@ export function AuthProvider({ children }) {
     const router = useRouter();
 
     useEffect(() => {
-        // Defer state updates to next microtask to avoid cascading renders
         Promise.resolve().then(() => {
             const storedUser = localStorage.getItem("user");
             if (storedUser) {
@@ -21,31 +20,36 @@ export function AuthProvider({ children }) {
         });
     }, []);
 
-    const login = (userData) => {
+    const setAuthUser = (userData) => {
         try {
-            // Save user to localStorage
             localStorage.setItem("user", JSON.stringify(userData));
-            // Update state
             setUser(userData);
-            // Redirect based on role
-            router.push(
+            const targetPath =
                 userData.role === "admin"
                     ? "/dashboard/admin"
-                    : "/dashboard/student",
-            );
+                    : "/dashboard/student";
+
+            router.push(targetPath);
+            router.refresh();
         } catch (error) {
             console.error("Failed to save user to localStorage:", error);
+            throw new Error("Failed to authenticate user");
         }
     };
+
+    const login = setAuthUser;
 
     const logout = () => {
         localStorage.removeItem("user");
         setUser(null);
         router.push("/login");
+        router.refresh();
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, loading }}>
+        <AuthContext.Provider
+            value={{ user, setAuthUser, login, logout, loading }}
+        >
             {children}
         </AuthContext.Provider>
     );

@@ -20,15 +20,14 @@ import Link from "next/link";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
-import { getDoc } from "firebase/firestore";
+import { useAuth } from "@/app/context/AuthContext";
 
-export default function SignupPage({ onSignup }) {
+export default function SignupPage() {
+    const { setAuthUser } = useAuth(); // Use AuthContext
     const [role, setRole] = useState("student"); // 'student' or 'admin'
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState(""); // Add error state
-    const [showSuccessModal, setShowSuccessModal] = useState(false); // Success modal state
-    const router = useRouter();
+    const [error, setError] = useState("");
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     // Student fields
     const [studentData, setStudentData] = useState({
@@ -57,12 +56,12 @@ export default function SignupPage({ onSignup }) {
 
     const handleStudentChange = (field, value) => {
         setStudentData((prev) => ({ ...prev, [field]: value }));
-        setError(""); // Clear error on input
+        setError("");
     };
 
     const handleAdminChange = (field, value) => {
         setAdminData((prev) => ({ ...prev, [field]: value }));
-        setError(""); // Clear error on input
+        setError("");
     };
 
     // Check if all fields for the current role are filled
@@ -86,7 +85,7 @@ export default function SignupPage({ onSignup }) {
 
         // Validate password length
         if (currentData.password.length < 6) {
-            setError("Password must be at least 6 characters");
+            setError("Password must be at least 6 characters long");
             return;
         }
 
@@ -96,8 +95,6 @@ export default function SignupPage({ onSignup }) {
             const email = currentData.email;
             const password = currentData.password;
 
-            console.log("Creating user account..."); // Debug log
-
             // Create Auth account
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
@@ -105,16 +102,14 @@ export default function SignupPage({ onSignup }) {
                 password,
             );
 
-            const user = userCredential.user;
-            console.log("User created:", user.uid); // Debug log
+            const firebaseUser = userCredential.user;
 
-            // Save role + profile to Firestore (users collection)
-            await setDoc(doc(db, "users", user.uid), {
+            // Prepare user data for Firestore
+            const userDocData = {
                 role,
                 email,
                 firstName: currentData.firstName,
                 lastName: currentData.lastName,
-
                 ...(role === "student"
                     ? {
                           matricNo: studentData.matricNo,
@@ -127,15 +122,15 @@ export default function SignupPage({ onSignup }) {
                           adminId: adminData.adminId,
                           phone: adminData.phone,
                       }),
-
                 createdAt: new Date(),
-            });
+            };
 
-            // CREATE STUDENT DOCUMENT if role is student
+            // Save to users collection
+            await setDoc(doc(db, "users", firebaseUser.uid), userDocData);
+
+            // Create student document if role is student
             if (role === "student") {
-                console.log("Creating student document with ID:", user.uid);
-
-                await setDoc(doc(db, "students", user.uid), {
+                await setDoc(doc(db, "students", firebaseUser.uid), {
                     email,
                     firstName: studentData.firstName,
                     lastName: studentData.lastName,
@@ -148,38 +143,43 @@ export default function SignupPage({ onSignup }) {
                     statusHistory: [],
                     lastUpdated: new Date(),
                 });
-
-                console.log("Student document created successfully");
-
-                // Verify it was created
-                const verifyDoc = await getDoc(doc(db, "students", user.uid));
-                console.log("Document exists:", verifyDoc.exists());
             }
 
-            console.log("Firestore data saved"); // Debug log
+            // Prepare AuthContext user object
+            const authUser = {
+                uid: firebaseUser.uid,
+                firstName: currentData.firstName,
+                lastName: currentData.lastName,
+                email: email,
+                role: role,
+                matricNo: role === "student" ? studentData.matricNo : "",
+            };
 
-            // Show success modal
+            // Show success modal first
             setShowSuccessModal(true);
 
-            // Redirect after 2 seconds
-            const redirectPath =
-                role === "admin" ? "/dashboard/admin" : "/dashboard/student";
-            console.log("Will redirect to:", redirectPath); // Debug log
-
+            // Redirect after 2 seconds using AuthContext
             setTimeout(() => {
-                router.push(redirectPath);
+                setAuthUser(authUser); // This will save to localStorage and redirect
             }, 2000);
-        } catch (error) {
-            console.error("Signup error:", error);
+        } catch (err) {
+            console.error("Registration error:", err);
 
-            // Better error messages
-            let errorMessage = error.message;
-            if (error.code === "auth/email-already-in-use") {
-                errorMessage = "This email is already registered";
-            } else if (error.code === "auth/invalid-email") {
-                errorMessage = "Invalid email address";
-            } else if (error.code === "auth/weak-password") {
-                errorMessage = "Password is too weak";
+            let errorMessage = "Registration failed. Please try again.";
+
+            if (err.code === "auth/email-already-in-use") {
+                errorMessage =
+                    "This email is already registered. Please login instead.";
+            } else if (err.code === "auth/invalid-email") {
+                errorMessage = "Please enter a valid email address";
+            } else if (err.code === "auth/weak-password") {
+                errorMessage = "Password must be at least 6 characters long";
+            } else if (err.code === "auth/network-request-failed") {
+                errorMessage =
+                    "Network error. Please check your internet connection";
+            } else if (err.code === "auth/operation-not-allowed") {
+                errorMessage =
+                    "Registration is currently disabled. Please contact support";
             }
 
             setError(errorMessage);
@@ -206,8 +206,7 @@ export default function SignupPage({ onSignup }) {
                                 {role === "student"
                                     ? studentData.firstName
                                     : adminData.firstName}
-                                ! You&apos;ll be redirected to your dashboard in
-                                a moment.
+                                ! Redirecting to your dashboard...
                             </p>
                             <div className="flex items-center justify-center gap-2">
                                 <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div>
@@ -233,8 +232,12 @@ export default function SignupPage({ onSignup }) {
                 <div className="flex gap-3 mb-6">
                     <button
                         type="button"
-                        onClick={() => setRole("student")}
-                        className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer ${
+                        onClick={() => {
+                            setRole("student");
+                            setError("");
+                        }}
+                        disabled={isLoading}
+                        className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                             role === "student"
                                 ? "bg-green-900 text-white shadow-md"
                                 : "bg-white text-gray-700 border-2 border-gray-200 hover:border-green-700"
@@ -245,8 +248,12 @@ export default function SignupPage({ onSignup }) {
                     </button>
                     <button
                         type="button"
-                        onClick={() => setRole("admin")}
-                        className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer ${
+                        onClick={() => {
+                            setRole("admin");
+                            setError("");
+                        }}
+                        disabled={isLoading}
+                        className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                             role === "admin"
                                 ? "bg-green-900 text-white shadow-md"
                                 : "bg-white text-gray-700 border-2 border-gray-200 hover:border-green-700"
@@ -591,7 +598,7 @@ export default function SignupPage({ onSignup }) {
                             fullWidth
                             size="lg"
                             disabled={isLoading || !isFormValid}
-                            className="bg-green-900 hover:bg-green-800 cursor-pointer text-white font-bold py-4"
+                            className="bg-green-900 hover:bg-green-800 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer text-white font-bold py-4"
                         >
                             {isLoading
                                 ? "Creating Account..."

@@ -7,17 +7,25 @@ export const useAdminExams = (adminId) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        setExams([]);
+        setLoading(true);
+
+        if (!adminId) {
+            setLoading(false);
+            return;
+        }
+
         const fetchExams = async () => {
-            setLoading(true);
             try {
                 const examsSnap = await getDocs(collection(db, "exams"));
                 const allExams = examsSnap.docs
                     .map((doc) => ({ id: doc.id, ...doc.data() }))
-                    .filter((exam) => exam.createdBy === adminId); // Only exams created by admin
+                    .filter((exam) => exam.createdBy === adminId);
 
                 setExams(allExams);
             } catch (error) {
                 console.error("Error fetching exams:", error);
+                setExams([]);
             } finally {
                 setLoading(false);
             }

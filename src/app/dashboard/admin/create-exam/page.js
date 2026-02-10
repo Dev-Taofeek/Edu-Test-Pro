@@ -11,6 +11,8 @@ import {
     Calendar,
     Clock,
     CheckCircle2,
+    Globe,
+    Lock,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -34,6 +36,7 @@ export default function CreateExam() {
         startTime: "",
         endDate: "",
         endTime: "",
+        visibility: "public", // "public" | "private"
     });
 
     const [selectedQuestions, setSelectedQuestions] = React.useState([]);
@@ -50,7 +53,6 @@ export default function CreateExam() {
     });
 
     const saveAsDraft = async () => {
-        // Add user check
         if (!user?.uid) {
             setErrorModal({
                 show: true,
@@ -58,8 +60,6 @@ export default function CreateExam() {
             });
             return;
         }
-
-        // Validate basic required fields
         if (!examData.examCode || !examData.title) {
             setErrorModal({
                 show: true,
@@ -67,7 +67,6 @@ export default function CreateExam() {
             });
             return;
         }
-
         setSaveStatus("saving");
         try {
             const examRef = doc(db, "exams", examData.examCode);
@@ -75,7 +74,7 @@ export default function CreateExam() {
                 ...examData,
                 selectedQuestions,
                 status: "draft",
-                createdBy: user.uid, // Add this line
+                createdBy: user.uid,
                 createdAt: serverTimestamp(),
             });
             setSaveStatus("success");
@@ -92,8 +91,6 @@ export default function CreateExam() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
-        // Add user check at the beginning
         if (!user?.uid) {
             setErrorModal({
                 show: true,
@@ -101,8 +98,6 @@ export default function CreateExam() {
             });
             return;
         }
-
-        // VALIDATE FIRST - before any database operations
         if (selectedQuestions.length < 1) {
             setErrorModal({
                 show: true,
@@ -110,7 +105,6 @@ export default function CreateExam() {
             });
             return;
         }
-
         if (!examData.examCode || !examData.title) {
             setErrorModal({
                 show: true,
@@ -118,12 +112,10 @@ export default function CreateExam() {
             });
             return;
         }
-
         const startDateTime = new Date(
             `${examData.startDate}T${examData.startTime}`,
         );
         const endDateTime = new Date(`${examData.endDate}T${examData.endTime}`);
-
         if (startDateTime >= endDateTime) {
             setErrorModal({
                 show: true,
@@ -131,23 +123,17 @@ export default function CreateExam() {
             });
             return;
         }
-
-        // NOW save to database after validation passes
         setSaveStatus("saving");
-
         try {
             const examRef = doc(db, "exams", examData.examCode);
             await setDoc(examRef, {
                 ...examData,
                 selectedQuestions,
                 status: "published",
-                createdBy: user.uid, // Add this line - CRITICAL!
+                createdBy: user.uid,
                 createdAt: serverTimestamp(),
             });
-
             setSaveStatus("success");
-
-            // Reset form AFTER successful save
             setTimeout(() => {
                 setSaveStatus(null);
                 setExamData({
@@ -162,6 +148,7 @@ export default function CreateExam() {
                     startTime: "",
                     endDate: "",
                     endTime: "",
+                    visibility: "public",
                 });
                 setSelectedQuestions([]);
             }, 2000);
@@ -188,6 +175,7 @@ export default function CreateExam() {
             startTime: "",
             endDate: "",
             endTime: "",
+            visibility: "public",
         });
         setSelectedQuestions([]);
     };
@@ -197,7 +185,6 @@ export default function CreateExam() {
     };
 
     const handleAddQuestion = () => {
-        // Validation
         if (!newQuestion.text.trim()) {
             setErrorModal({ show: true, message: "Question text is required" });
             return;
@@ -206,17 +193,10 @@ export default function CreateExam() {
             setErrorModal({ show: true, message: "All options are required" });
             return;
         }
-
-        // Add question
         setSelectedQuestions([
             ...selectedQuestions,
-            {
-                ...newQuestion,
-                id: Date.now().toString(),
-            },
+            { ...newQuestion, id: Date.now().toString() },
         ]);
-
-        // Reset modal
         setNewQuestion({
             text: "",
             options: ["", "", "", ""],
@@ -234,10 +214,7 @@ export default function CreateExam() {
     const updateOption = (index, value) => {
         const updatedOptions = [...newQuestion.options];
         updatedOptions[index] = value;
-        setNewQuestion({
-            ...newQuestion,
-            options: updatedOptions,
-        });
+        setNewQuestion({ ...newQuestion, options: updatedOptions });
     };
 
     return (
@@ -255,11 +232,7 @@ export default function CreateExam() {
             {/* Status Message */}
             {saveStatus && (
                 <Card
-                    className={`p-4 border-2 rounded-2xl ${
-                        saveStatus === "success"
-                            ? "bg-green-50 border-green-200"
-                            : "bg-blue-50 border-blue-200"
-                    }`}
+                    className={`p-4 border-2 rounded-2xl ${saveStatus === "success" ? "bg-green-50 border-green-200" : "bg-blue-50 border-blue-200"}`}
                 >
                     <div className="flex items-center gap-3">
                         {saveStatus === "success" ? (
@@ -406,6 +379,116 @@ export default function CreateExam() {
                                 required
                             />
                         </div>
+
+                        {/* ── Visibility Toggle ── */}
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-3">
+                                Exam Visibility
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {/* Public Option */}
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        handleChange("visibility", "public")
+                                    }
+                                    className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                        examData.visibility === "public"
+                                            ? "border-green-600 bg-green-50"
+                                            : "border-gray-200 bg-white hover:border-gray-300"
+                                    }`}
+                                >
+                                    <div
+                                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                            examData.visibility === "public"
+                                                ? "bg-green-100"
+                                                : "bg-gray-100"
+                                        }`}
+                                    >
+                                        <Globe
+                                            className={`h-5 w-5 ${
+                                                examData.visibility === "public"
+                                                    ? "text-green-700"
+                                                    : "text-gray-500"
+                                            }`}
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <p
+                                                className={`font-bold text-sm ${
+                                                    examData.visibility ===
+                                                    "public"
+                                                        ? "text-green-800"
+                                                        : "text-gray-700"
+                                                }`}
+                                            >
+                                                Public
+                                            </p>
+                                            {examData.visibility ===
+                                                "public" && (
+                                                <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            Visible to all students on the
+                                            platform
+                                        </p>
+                                    </div>
+                                </button>
+
+                                {/* Private Option */}
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        handleChange("visibility", "private")
+                                    }
+                                    className={`flex items-center gap-4 p-4 rounded-xl border-2 text-left transition-all cursor-pointer ${
+                                        examData.visibility === "private"
+                                            ? "border-blue-600 bg-blue-50"
+                                            : "border-gray-200 bg-white hover:border-gray-300"
+                                    }`}
+                                >
+                                    <div
+                                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                            examData.visibility === "private"
+                                                ? "bg-blue-100"
+                                                : "bg-gray-100"
+                                        }`}
+                                    >
+                                        <Lock
+                                            className={`h-5 w-5 ${
+                                                examData.visibility ===
+                                                "private"
+                                                    ? "text-blue-700"
+                                                    : "text-gray-500"
+                                            }`}
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <p
+                                                className={`font-bold text-sm ${
+                                                    examData.visibility ===
+                                                    "private"
+                                                        ? "text-blue-800"
+                                                        : "text-gray-700"
+                                                }`}
+                                            >
+                                                Private
+                                            </p>
+                                            {examData.visibility ===
+                                                "private" && (
+                                                <CheckCircle className="h-4 w-4 text-blue-600 shrink-0" />
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-0.5">
+                                            Only accessible via exam code
+                                        </p>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </Card>
 
@@ -424,7 +507,6 @@ export default function CreateExam() {
                             </p>
                         </div>
                     </div>
-
                     <div className="space-y-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <Input
@@ -446,7 +528,6 @@ export default function CreateExam() {
                                 required
                             />
                         </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <Input
                                 label="End Date"
@@ -469,10 +550,10 @@ export default function CreateExam() {
                         </div>
                     </div>
                 </Card>
-                {/* Question Selection Card */}
+
+                {/* Question Bank */}
                 <div className="w-full max-w-4xl mx-auto">
                     <div className="bg-white border border-gray-200 rounded-2xl shadow-md overflow-hidden">
-                        {/* Header */}
                         <div className="p-6 border-b border-gray-100 bg-linear-to-r from-green-50 to-white">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-4">
@@ -502,8 +583,6 @@ export default function CreateExam() {
                                 </button>
                             </div>
                         </div>
-
-                        {/* Questions List */}
                         <div className="p-6">
                             {selectedQuestions.length > 0 ? (
                                 <div className="space-y-3">
@@ -532,12 +611,7 @@ export default function CreateExam() {
                                                                     key={
                                                                         optIndex
                                                                     }
-                                                                    className={`flex items-center gap-2 text-sm ${
-                                                                        optIndex ===
-                                                                        q.correctOptionIndex
-                                                                            ? "text-green-700 font-medium"
-                                                                            : "text-gray-700"
-                                                                    }`}
+                                                                    className={`flex items-center gap-2 text-sm ${optIndex === q.correctOptionIndex ? "text-green-700 font-medium" : "text-gray-700"}`}
                                                                 >
                                                                     {optIndex ===
                                                                     q.correctOptionIndex ? (
@@ -559,7 +633,6 @@ export default function CreateExam() {
                                                     onClick={() =>
                                                         removeQuestion(q.id)
                                                     }
-                                                    aria-label="Remove question"
                                                 >
                                                     <X className="h-5 w-5" />
                                                 </button>
@@ -589,7 +662,6 @@ export default function CreateExam() {
                 {showQuestionModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
                         <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-                            {/* Modal Header */}
                             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-center justify-between">
                                 <div>
                                     <h2 className="text-xl font-semibold text-gray-900">
@@ -604,15 +676,11 @@ export default function CreateExam() {
                                     type="button"
                                     className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                                     onClick={() => setShowQuestionModal(false)}
-                                    aria-label="Close modal"
                                 >
                                     <X className="h-5 w-5" />
                                 </button>
                             </div>
-
-                            {/* Modal Content */}
                             <div className="p-6 space-y-6">
-                                {/* Question Text */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Question Text *
@@ -630,8 +698,6 @@ export default function CreateExam() {
                                         }
                                     />
                                 </div>
-
-                                {/* Options */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-3">
                                         Answer Options *
@@ -645,12 +711,7 @@ export default function CreateExam() {
                                             (option, index) => (
                                                 <div
                                                     key={index}
-                                                    className={`flex items-center gap-3 p-3 border-2 rounded-xl transition-all ${
-                                                        newQuestion.correctOptionIndex ===
-                                                        index
-                                                            ? "border-green-500 bg-green-50"
-                                                            : "border-gray-200 hover:border-gray-300"
-                                                    }`}
+                                                    className={`flex items-center gap-3 p-3 border-2 rounded-xl transition-all ${newQuestion.correctOptionIndex === index ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}
                                                 >
                                                     <input
                                                         type="radio"
@@ -686,8 +747,6 @@ export default function CreateExam() {
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Modal Footer */}
                             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6 flex items-center justify-end gap-3">
                                 <button
                                     type="button"
@@ -728,7 +787,6 @@ export default function CreateExam() {
                         >
                             Save as Draft
                         </Button>
-
                         <Button
                             type="button"
                             size="lg"
@@ -762,6 +820,14 @@ export default function CreateExam() {
                                 <span>
                                     Ensure duration is appropriate for the
                                     number of questions
+                                </span>
+                            </li>
+                            <li className="flex items-start">
+                                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 mr-3 shrink-0" />
+                                <span>
+                                    Use <strong>Public</strong> for open exams,{" "}
+                                    <strong>Private</strong> for invite-only
+                                    (students need the exam code)
                                 </span>
                             </li>
                             <li className="flex items-start">

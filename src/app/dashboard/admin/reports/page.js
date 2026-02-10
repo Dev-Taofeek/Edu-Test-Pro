@@ -12,14 +12,15 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { useAuth } from "@/app/context/AuthContext";
 import { useAdminStudents } from "@/hooks/useAdminStudents";
 import { useAdminExams } from "@/hooks/useAdminExams";
 
-export default function Reports({ currentAdminId }) {
+export default function Reports() {
+    const { user } = useAuth(); // Get user from context
     const [dateRange, setDateRange] = useState("last30");
-    const { students, loading: studentsLoading } =
-        useAdminStudents(currentAdminId);
-    const { exams, loading: examsLoading } = useAdminExams(currentAdminId);
+    const { students, loading: studentsLoading } = useAdminStudents(user?.uid);
+    const { exams, loading: examsLoading } = useAdminExams(user?.uid);
 
     // Calculate stats from real data
     const stats = useMemo(() => {
@@ -190,6 +191,18 @@ export default function Reports({ currentAdminId }) {
 
     const loading = studentsLoading || examsLoading;
 
+    // Show loader while user is being fetched
+    if (!user) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-12 h-12 border-4 border-green-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-700 font-semibold">Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="flex flex-col items-center justify-center py-20">
@@ -210,27 +223,9 @@ export default function Reports({ currentAdminId }) {
                         View Reports
                     </h1>
                     <p className="text-gray-600 mt-1">
-                        Analytics and performance insights
+                        Analytics and performance insights for {user.firstName}
+                        &apos;s exams
                     </p>
-                </div>
-                <div className="flex gap-3">
-                    <select
-                        value={dateRange}
-                        onChange={(e) => setDateRange(e.target.value)}
-                        className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-900 focus:border-transparent font-semibold cursor-pointer"
-                    >
-                        <option value="last7">Last 7 Days</option>
-                        <option value="last30">Last 30 Days</option>
-                        <option value="last90">Last 90 Days</option>
-                        <option value="all">All Time</option>
-                    </select>
-                    <Button
-                        size="sm"
-                        className="bg-green-900 hover:bg-green-800 cursor-pointer text-white font-bold"
-                    >
-                        <Download className="mr-2 h-4 w-4" />
-                        Export Report
-                    </Button>
                 </div>
             </div>
 
