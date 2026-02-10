@@ -21,7 +21,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { getDoc } from "@firebase/firestore";
+import { getDoc } from "firebase/firestore";
 
 export default function SignupPage({ onSignup }) {
     const [role, setRole] = useState("student"); // 'student' or 'admin'
