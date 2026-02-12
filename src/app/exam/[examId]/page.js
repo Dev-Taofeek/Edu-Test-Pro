@@ -24,7 +24,7 @@ import {
     checkExamAvailability,
     formatTimeRemaining,
     getTimeRemaining,
-} from "@/utils/ExamUtils";
+} from "@/utils/examUtils";
 
 export default function ExamPage() {
     const { examId } = useParams();

@@ -35,7 +35,7 @@ export default function LandingPage({ onLoginClick }) {
             {/* Hero Section */}
             <section className="relative min-h-[95vh] flex items-center justify-center overflow-hidden bg-linear-to-br from-green-50 via-emerald-50 to-green-50">
                 {/* Square Grid Background */}
-                <div className="absolute inset-0 opacity-20">
+                <div className="absolute inset-0 opacity-10">
                     <div
                         className="absolute inset-0"
                         style={{
@@ -44,7 +44,6 @@ export default function LandingPage({ onLoginClick }) {
                                 linear-gradient(to bottom, #059669 1px, transparent 1px)
                             `,
                             backgroundSize: "40px 40px",
-                            transform: `translateY(${scrollY * 0.3}px)`,
                         }}
                     />
                 </div>
@@ -63,12 +62,12 @@ export default function LandingPage({ onLoginClick }) {
                     />
                     <div
                         className="absolute bottom-32 left-1/4 w-20 h-20 border-2 border-emerald-300/25 rounded-lg"
-                        style={{ animation: "float 7s ease-in-out infinite" }}
+                        style={{ animation: "float 3s ease-in-out infinite" }}
                     />
                     <div
                         className="absolute bottom-20 right-1/3 w-28 h-28 border-2 border-emerald-400/30 rounded-lg"
                         style={{
-                            animation: "float 9s ease-in-out infinite reverse",
+                            animation: "float 4s ease-in-out infinite reverse",
                         }}
                     />
                 </div>
@@ -79,20 +78,8 @@ export default function LandingPage({ onLoginClick }) {
                     <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl" />
                 </div>
 
-                <style jsx>{`
-                    @keyframes float {
-                        0%,
-                        100% {
-                            transform: translateY(0px) rotate(0deg);
-                        }
-                        50% {
-                            transform: translateY(-20px) rotate(5deg);
-                        }
-                    }
-                `}</style>
-
-                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
-                    <div className="text-center space-y-8">
+                <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <div className="text-center space-y-6">
                         {/* Badge */}
                         <div
                             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full 
@@ -118,7 +105,7 @@ export default function LandingPage({ onLoginClick }) {
                         </h1>
 
                         {/* Subheadline */}
-                        <p className="text-lg sm:text-xl md:text-2xl text-slate-700 max-w-3xl mx-auto leading-relaxed font-light">
+                        <p className="text-lg sm:text-xl md:text-xl text-slate-700 max-w-3xl mx-auto leading-relaxed font-light">
                             Join{" "}
                             <span className="text-emerald-600 font-bold">
                                 50,000+
@@ -487,8 +474,8 @@ export default function LandingPage({ onLoginClick }) {
                     </div>
 
                     <p className="text-sm text-slate-500">
-                        ✓ No credit card required &nbsp;•&nbsp; ✓ 10,000+
-                        questions &nbsp;•&nbsp; ✓ Instant access
+                        ✓ No credit card required • ✓ 10,000+ questions • ✓
+                        Instant access
                     </p>
                 </div>
             </section>

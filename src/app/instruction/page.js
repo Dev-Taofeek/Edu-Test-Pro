@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/Button";
 
 export default function InstructionsPage({ onLoginClick }) {
     return (
-        <div className="flex flex-col min-h-screen bg-green-50">
+        <main className="flex flex-col min-h-screen bg-green-50">
             {/* Hero Section */}
             <section className="relative bg-linear-to-br from-green-50 via-emerald-50 to-green-50 text-slate-900 py-12 sm:py-16 border-b border-emerald-200">
                 {/* Background Effect */}
@@ -546,6 +546,6 @@ export default function InstructionsPage({ onLoginClick }) {
                     </div>
                 </div>
             </section>
-        </div>
+        </main>
     );
 }

@@ -87,7 +87,7 @@ export default function AdminDashboardLayout({ children }) {
                         </Link>
                         <button
                             onClick={() => setIsSidebarOpen(false)}
-                            className="lg:hidden"
+                            className="lg:hidden cursor-pointer"
                         >
                             <X />
                         </button>
@@ -149,7 +149,7 @@ export default function AdminDashboardLayout({ children }) {
                     <header className="sticky top-0 bg-white border-b border-[#aeaeae] z-30 h-16 flex items-center px-6">
                         <button
                             onClick={() => setIsSidebarOpen(true)}
-                            className="lg:hidden"
+                            className="lg:hidden cursor-pointer"
                         >
                             <Menu />
                         </button>

@@ -173,7 +173,7 @@ export default function SignupPage() {
 
         const dobDate = new Date(dob);
         const today = new Date();
-        const age = today.getFullYear() - dobDate.getFullYear();
+        let age = today.getFullYear() - dobDate.getFullYear();
         const monthDiff = today.getMonth() - dobDate.getMonth();
 
         if (
