@@ -17,7 +17,7 @@ import {
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -70,8 +70,27 @@ export default function CreateExam() {
         setSaveStatus("saving");
         try {
             const examRef = doc(db, "exams", examData.examCode);
+
+            // Convert date/time to Timestamp objects if provided
+            let startDateTime = null;
+            let endDateTime = null;
+
+            if (examData.startDate && examData.startTime) {
+                startDateTime = Timestamp.fromDate(
+                    new Date(`${examData.startDate}T${examData.startTime}`),
+                );
+            }
+
+            if (examData.endDate && examData.endTime) {
+                endDateTime = Timestamp.fromDate(
+                    new Date(`${examData.endDate}T${examData.endTime}`),
+                );
+            }
+
             await setDoc(examRef, {
                 ...examData,
+                startDateTime,
+                endDateTime,
                 selectedQuestions,
                 status: "draft",
                 createdBy: user.uid,
@@ -126,8 +145,15 @@ export default function CreateExam() {
         setSaveStatus("saving");
         try {
             const examRef = doc(db, "exams", examData.examCode);
+
+            // Convert to Firebase Timestamp objects
+            const startTimestamp = Timestamp.fromDate(startDateTime);
+            const endTimestamp = Timestamp.fromDate(endDateTime);
+
             await setDoc(examRef, {
                 ...examData,
+                startDateTime: startTimestamp,
+                endDateTime: endTimestamp,
                 selectedQuestions,
                 status: "published",
                 createdBy: user.uid,
@@ -834,6 +860,13 @@ export default function CreateExam() {
                                 <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 mr-3 shrink-0" />
                                 <span>
                                     Provide clear instructions for students
+                                </span>
+                            </li>
+                            <li className="flex items-start">
+                                <div className="w-1.5 h-1.5 bg-blue-600 rounded-full mt-2 mr-3 shrink-0" />
+                                <span>
+                                    Exams will automatically become unavailable
+                                    after the end date and time
                                 </span>
                             </li>
                         </ul>

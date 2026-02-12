@@ -9,34 +9,103 @@ import Link from "next/link";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
+// Email validation regex - RFC 5322 compliant
+const EMAIL_REGEX =
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
 export default function ForgotPasswordPage() {
     const [email, setEmail] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [error, setError] = useState("");
+    const [touched, setTouched] = useState(false);
 
-    const isFormValid = email.trim() !== "";
+    // Validation functions
+    const validateEmail = (email) => {
+        if (!email.trim()) {
+            return "Email is required";
+        }
+
+        if (email.length > 254) {
+            return "Email is too long";
+        }
+
+        if (!EMAIL_REGEX.test(email)) {
+            return "Please enter a valid email address";
+        }
+
+        // Check for common typos in domain
+        const domain = email.split("@")[1];
+        if (domain) {
+            const commonDomainTypos = {
+                "gmial.com": "gmail.com",
+                "gmai.com": "gmail.com",
+                "yahooo.com": "yahoo.com",
+                "yaho.com": "yahoo.com",
+                "hotmial.com": "hotmail.com",
+                "outlok.com": "outlook.com",
+            };
+
+            if (commonDomainTypos[domain.toLowerCase()]) {
+                return `Did you mean ${email.split("@")[0]}@${commonDomainTypos[domain.toLowerCase()]}?`;
+            }
+        }
+
+        return "";
+    };
+
+    const emailError = touched ? validateEmail(email) : "";
+    const isFormValid = email.trim() !== "" && !validateEmail(email);
+
+    const handleEmailChange = (e) => {
+        const value = e.target.value;
+        // Remove leading/trailing spaces as user types
+        setEmail(value.trim());
+
+        // Mark as touched after first character
+        if (value && !touched) {
+            setTouched(true);
+        }
+    };
+
+    const handleBlur = () => {
+        setTouched(true);
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setTouched(true);
+
+        // Validate before submission
+        const validationError = validateEmail(email);
+        if (validationError) {
+            setError(validationError);
+            return;
+        }
+
         setIsLoading(true);
         setError("");
 
         try {
-            if (!email.includes("@")) {
-                throw new Error("Please enter a valid email address");
-            }
-
-            await sendPasswordResetEmail(auth, email);
-
+            await sendPasswordResetEmail(auth, email.trim().toLowerCase());
             setIsSuccess(true);
         } catch (err) {
             console.error(err);
-            setError(
-                err.message === "Firebase: Error (auth/user-not-found)."
-                    ? "No account found with this email"
-                    : "Failed to send reset email. Try again.",
-            );
+
+            // Handle Firebase specific errors
+            let errorMessage = "Failed to send reset email. Please try again.";
+
+            if (err.code === "auth/user-not-found") {
+                errorMessage = "No account found with this email address";
+            } else if (err.code === "auth/invalid-email") {
+                errorMessage = "Invalid email address";
+            } else if (err.code === "auth/too-many-requests") {
+                errorMessage = "Too many requests. Please try again later";
+            } else if (err.code === "auth/network-request-failed") {
+                errorMessage = "Network error. Please check your connection";
+            }
+
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -47,9 +116,16 @@ export default function ForgotPasswordPage() {
         setError("");
 
         try {
-            await sendPasswordResetEmail(auth, email);
+            await sendPasswordResetEmail(auth, email.trim().toLowerCase());
         } catch (err) {
-            setError("Failed to resend email. Please try again.");
+            let errorMessage = "Failed to resend email. Please try again.";
+
+            if (err.code === "auth/too-many-requests") {
+                errorMessage =
+                    "Too many requests. Please wait a few minutes before trying again";
+            }
+
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -81,18 +157,31 @@ export default function ForgotPasswordPage() {
                                         type="email"
                                         placeholder="Enter your registered email"
                                         value={email}
-                                        onChange={(e) =>
-                                            setEmail(e.target.value)
-                                        }
+                                        onChange={handleEmailChange}
+                                        onBlur={handleBlur}
                                         required
+                                        autoComplete="email"
+                                        className={
+                                            emailError
+                                                ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                                                : ""
+                                        }
                                     />
-                                    <p className="mt-2 text-sm text-gray-500">
-                                        We&apos;ll send a password reset link to
-                                        this email
-                                    </p>
+                                    {emailError && (
+                                        <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <span>{emailError}</span>
+                                        </p>
+                                    )}
+                                    {!emailError && email && (
+                                        <p className="mt-2 text-sm text-gray-500">
+                                            We&apos;ll send a password reset
+                                            link to this email
+                                        </p>
+                                    )}
                                 </div>
 
-                                {error && (
+                                {error && !emailError && (
                                     <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
                                         <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
                                         <p className="text-sm text-red-700">
@@ -172,6 +261,15 @@ export default function ForgotPasswordPage() {
                                         </li>
                                     </ul>
                                 </div>
+
+                                {error && (
+                                    <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                                        <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                                        <p className="text-sm text-red-700">
+                                            {error}
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="text-center text-sm text-gray-600">
                                     Didn&apos;t receive the email?{" "}

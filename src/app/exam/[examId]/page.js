@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { doc, getDoc, updateDoc, arrayUnion, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useAuth } from "@/app/context/AuthContext"; // Import useAuth
+import { useAuth } from "@/app/context/AuthContext";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -17,14 +17,19 @@ import {
     ChevronRight,
     Save,
     Send,
+    Lock,
 } from "lucide-react";
 import Link from "next/link";
+import {
+    checkExamAvailability,
+    formatTimeRemaining,
+    getTimeRemaining,
+} from "@/utils/ExamUtils";
 
 export default function ExamPage() {
-    // Remove studentId prop
     const { examId } = useParams();
     const router = useRouter();
-    const { user } = useAuth(); // Get user from auth context
+    const { user } = useAuth();
 
     const [exam, setExam] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -33,6 +38,9 @@ export default function ExamPage() {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [answers, setAnswers] = useState({});
     const [timeRemaining, setTimeRemaining] = useState(0);
+    const [availability, setAvailability] = useState(null);
+    const [examWindowTimeRemaining, setExamWindowTimeRemaining] =
+        useState(null);
 
     useEffect(() => {
         const fetchExam = async () => {
@@ -49,7 +57,20 @@ export default function ExamPage() {
 
                 const examData = examSnap.data();
                 setExam(examData);
+
+                // Check exam availability
+                const availabilityStatus = checkExamAvailability(examData);
+                setAvailability(availabilityStatus);
+
+                // Set exam duration timer
                 setTimeRemaining(examData.duration * 60);
+
+                // If exam is available, set window time remaining
+                if (availabilityStatus.isAvailable) {
+                    const remaining = getTimeRemaining(examData);
+                    setExamWindowTimeRemaining(remaining);
+                }
+
                 setLoading(false);
             } catch (err) {
                 console.error(err);
@@ -61,7 +82,30 @@ export default function ExamPage() {
         fetchExam();
     }, [examId]);
 
-    // Timer countdown
+    // Check exam window availability every second
+    useEffect(() => {
+        if (!exam || !availability?.isAvailable) return;
+
+        const interval = setInterval(() => {
+            const remaining = getTimeRemaining(exam);
+            setExamWindowTimeRemaining(remaining);
+
+            // If exam window has ended, update availability
+            if (remaining.totalSeconds <= 0) {
+                const newAvailability = checkExamAvailability(exam);
+                setAvailability(newAvailability);
+
+                // If user is in the middle of exam, auto-submit
+                if (examStarted) {
+                    handleSubmitExam();
+                }
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [exam, availability, examStarted]);
+
+    // Timer countdown for exam duration
     useEffect(() => {
         if (!examStarted || timeRemaining <= 0) return;
 
@@ -86,6 +130,11 @@ export default function ExamPage() {
     };
 
     const handleStartExam = () => {
+        // Double-check availability before starting
+        if (!availability?.isAvailable) {
+            setError("This exam is no longer available.");
+            return;
+        }
         setExamStarted(true);
     };
 
@@ -222,6 +271,120 @@ export default function ExamPage() {
         );
     }
 
+    // Exam not started yet
+    if (availability?.status === "not_started") {
+        const startDateTime = exam.startDateTime?.toDate
+            ? exam.startDateTime.toDate()
+            : new Date(exam.startDateTime);
+
+        return (
+            <div className="min-h-screen bg-blue-50 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+                <Card className="p-8 max-w-lg w-full">
+                    <div className="text-center">
+                        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Calendar className="h-10 w-10 text-blue-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                            {exam.title}
+                        </h2>
+                        <p className="text-gray-600 mb-1">{exam.course}</p>
+                        <p className="text-lg text-gray-600 mb-6">
+                            Exam hasn&apos;t started yet
+                        </p>
+                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+                            <p className="text-sm font-medium text-gray-700">
+                                Starts on:
+                            </p>
+                            <p className="text-lg font-bold text-blue-900">
+                                {startDateTime.toLocaleDateString("en-US", {
+                                    weekday: "long",
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })}
+                            </p>
+                            <p className="text-xl font-bold text-blue-900">
+                                {startDateTime.toLocaleTimeString("en-US", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                })}
+                            </p>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-6">
+                            Please check back at the scheduled time
+                        </p>
+                        <Link href="/dashboard/student">
+                            <Button
+                                variant="outline"
+                                className="cursor-pointer"
+                            >
+                                <ChevronLeft className="mr-2 h-5 w-5" />
+                                Back to Dashboard
+                            </Button>
+                        </Link>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
+    // Exam has ended
+    if (availability?.status === "ended") {
+        const endDateTime = exam.endDateTime?.toDate
+            ? exam.endDateTime.toDate()
+            : new Date(exam.endDateTime);
+
+        return (
+            <div className="min-h-screen bg-red-50 p-4 sm:p-6 lg:p-8 flex items-center justify-center">
+                <Card className="p-8 max-w-lg w-full">
+                    <div className="text-center">
+                        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <Lock className="h-10 w-10 text-red-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                            {exam.title}
+                        </h2>
+                        <p className="text-gray-600 mb-1">{exam.course}</p>
+                        <p className="text-lg text-gray-600 mb-6">
+                            This exam has ended
+                        </p>
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+                            <p className="text-sm font-medium text-gray-700">
+                                Ended on:
+                            </p>
+                            <p className="text-lg font-bold text-red-900">
+                                {endDateTime.toLocaleDateString("en-US", {
+                                    weekday: "long",
+                                    year: "numeric",
+                                    month: "long",
+                                    day: "numeric",
+                                })}
+                            </p>
+                            <p className="text-xl font-bold text-red-900">
+                                {endDateTime.toLocaleTimeString("en-US", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                })}
+                            </p>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-6">
+                            This exam is no longer accepting submissions
+                        </p>
+                        <Link href="/dashboard/student">
+                            <Button
+                                variant="outline"
+                                className="cursor-pointer"
+                            >
+                                <ChevronLeft className="mr-2 h-5 w-5" />
+                                Back to Dashboard
+                            </Button>
+                        </Link>
+                    </div>
+                </Card>
+            </div>
+        );
+    }
+
     // Lobby/Welcome Screen
     if (!examStarted) {
         return (
@@ -239,6 +402,29 @@ export default function ExamPage() {
                             </button>
                         </Link>
                     </div>
+
+                    {/* Exam Window Time Remaining Banner */}
+                    {examWindowTimeRemaining &&
+                        examWindowTimeRemaining.totalSeconds > 0 && (
+                            <Card className="mb-6 p-4 bg-linear-to-r from-amber-50 to-orange-50 border-2 border-amber-200">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Clock className="h-6 w-6 text-amber-700" />
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-700">
+                                                Exam window closes in
+                                            </p>
+                                            <p className="text-lg font-bold text-amber-900">
+                                                {formatTimeRemaining(
+                                                    examWindowTimeRemaining.totalSeconds,
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <AlertCircle className="h-8 w-8 text-amber-600" />
+                                </div>
+                            </Card>
+                        )}
 
                     {/* Main Lobby Card */}
                     <Card className="bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
@@ -381,6 +567,16 @@ export default function ExamPage() {
                                             <span>
                                                 You can navigate between
                                                 questions freely.
+                                            </span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <span className="text-amber-600 mt-1">
+                                                •
+                                            </span>
+                                            <span>
+                                                The exam window will close
+                                                automatically at the scheduled
+                                                end time.
                                             </span>
                                         </li>
                                     </ul>

@@ -8,6 +8,7 @@ import {
     GraduationCap,
     Shield,
     CheckCircle,
+    AlertCircle,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -17,6 +18,10 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
+
+// Email validation regex - RFC 5322 compliant
+const EMAIL_REGEX =
+    /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
 export default function LoginPage() {
     const { login } = useAuth(); // Use AuthContext login
@@ -34,26 +39,160 @@ export default function LoginPage() {
     const [adminEmail, setAdminEmail] = useState("");
     const [adminPassword, setAdminPassword] = useState("");
 
+    // Validation states
+    const [touched, setTouched] = useState({
+        studentEmail: false,
+        studentPassword: false,
+        adminEmail: false,
+        adminPassword: false,
+    });
+
+    // Validation functions
+    const validateEmail = (email) => {
+        if (!email.trim()) {
+            return "Email is required";
+        }
+
+        if (email.length > 254) {
+            return "Email is too long";
+        }
+
+        if (!EMAIL_REGEX.test(email)) {
+            return "Please enter a valid email address";
+        }
+
+        return "";
+    };
+
+    const validatePassword = (password) => {
+        if (!password) {
+            return "Password is required";
+        }
+
+        if (password.length < 6) {
+            return "Password must be at least 6 characters";
+        }
+
+        if (password.length > 128) {
+            return "Password is too long";
+        }
+
+        return "";
+    };
+
+    // Get current validation errors
+    const studentEmailError = touched.studentEmail
+        ? validateEmail(studentEmail)
+        : "";
+    const studentPasswordError = touched.studentPassword
+        ? validatePassword(studentPassword)
+        : "";
+    const adminEmailError = touched.adminEmail ? validateEmail(adminEmail) : "";
+    const adminPasswordError = touched.adminPassword
+        ? validatePassword(adminPassword)
+        : "";
+
     // Determine if form is valid
     const isFormValid =
         role === "student"
-            ? studentEmail.trim() !== "" && studentPassword.trim() !== ""
-            : adminEmail.trim() !== "" && adminPassword.trim() !== "";
+            ? studentEmail.trim() !== "" &&
+              studentPassword.trim() !== "" &&
+              !validateEmail(studentEmail) &&
+              !validatePassword(studentPassword)
+            : adminEmail.trim() !== "" &&
+              adminPassword.trim() !== "" &&
+              !validateEmail(adminEmail) &&
+              !validatePassword(adminPassword);
+
+    const handleBlur = (field) => {
+        setTouched((prev) => ({ ...prev, [field]: true }));
+    };
+
+    const handleEmailChange = (e, type) => {
+        const value = e.target.value.trim();
+
+        if (type === "student") {
+            setStudentEmail(value);
+            if (value && !touched.studentEmail) {
+                setTouched((prev) => ({ ...prev, studentEmail: true }));
+            }
+        } else {
+            setAdminEmail(value);
+            if (value && !touched.adminEmail) {
+                setTouched((prev) => ({ ...prev, adminEmail: true }));
+            }
+        }
+        setError("");
+    };
+
+    const handlePasswordChange = (e, type) => {
+        const value = e.target.value;
+
+        if (type === "student") {
+            setStudentPassword(value);
+            if (value && !touched.studentPassword) {
+                setTouched((prev) => ({ ...prev, studentPassword: true }));
+            }
+        } else {
+            setAdminPassword(value);
+            if (value && !touched.adminPassword) {
+                setTouched((prev) => ({ ...prev, adminPassword: true }));
+            }
+        }
+        setError("");
+    };
+
+    const handleRoleChange = (newRole) => {
+        setRole(newRole);
+        setError("");
+        // Reset validation when switching roles
+        setTouched({
+            studentEmail: false,
+            studentPassword: false,
+            adminEmail: false,
+            adminPassword: false,
+        });
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Mark all fields as touched
+        if (role === "student") {
+            setTouched((prev) => ({
+                ...prev,
+                studentEmail: true,
+                studentPassword: true,
+            }));
+        } else {
+            setTouched((prev) => ({
+                ...prev,
+                adminEmail: true,
+                adminPassword: true,
+            }));
+        }
+
+        // Validate before submission
+        const loginEmail = role === "student" ? studentEmail : adminEmail;
+        const loginPassword =
+            role === "student" ? studentPassword : adminPassword;
+
+        const emailError = validateEmail(loginEmail);
+        const passwordError = validatePassword(loginPassword);
+
+        if (emailError || passwordError) {
+            setError(emailError || passwordError);
+            return;
+        }
+
         setError("");
         setIsLoading(true);
 
         try {
-            const loginEmail = role === "student" ? studentEmail : adminEmail;
-            const loginPassword =
-                role === "student" ? studentPassword : adminPassword;
-
             // Firebase Auth login
             const userCredential = await signInWithEmailAndPassword(
                 auth,
-                loginEmail,
+                loginEmail.toLowerCase(),
                 loginPassword,
             );
 
@@ -165,10 +304,7 @@ export default function LoginPage() {
                 <div className="flex gap-3 mb-6">
                     <button
                         type="button"
-                        onClick={() => {
-                            setRole("student");
-                            setError("");
-                        }}
+                        onClick={() => handleRoleChange("student")}
                         disabled={isLoading}
                         className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                             role === "student"
@@ -182,10 +318,7 @@ export default function LoginPage() {
 
                     <button
                         type="button"
-                        onClick={() => {
-                            setRole("admin");
-                            setError("");
-                        }}
+                        onClick={() => handleRoleChange("admin")}
                         disabled={isLoading}
                         className={`flex-1 py-3 px-4 rounded-xl font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                             role === "admin"
@@ -201,63 +334,151 @@ export default function LoginPage() {
                 <Card className="p-8 shadow-lg border-t-4 border-t-green-900 bg-white rounded-2xl">
                     {/* Error Alert */}
                     {error && (
-                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                            {error}
+                        <div className="mb-6 flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                            <p className="text-sm text-red-700">{error}</p>
                         </div>
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {role === "student" ? (
                             <>
-                                <Input
-                                    label="Email Address"
-                                    type="email"
-                                    placeholder="student@example.com"
-                                    value={studentEmail}
-                                    onChange={(e) => {
-                                        setStudentEmail(e.target.value);
-                                        setError("");
-                                    }}
-                                    required
-                                />
-                                <Input
-                                    label="Password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    value={studentPassword}
-                                    onChange={(e) => {
-                                        setStudentPassword(e.target.value);
-                                        setError("");
-                                    }}
-                                    required
-                                />
+                                <div>
+                                    <Input
+                                        label="Email Address"
+                                        type="email"
+                                        placeholder="student@example.com"
+                                        value={studentEmail}
+                                        onChange={(e) =>
+                                            handleEmailChange(e, "student")
+                                        }
+                                        onBlur={() =>
+                                            handleBlur("studentEmail")
+                                        }
+                                        required
+                                        autoComplete="email"
+                                        className={
+                                            studentEmailError
+                                                ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                                                : ""
+                                        }
+                                    />
+                                    {studentEmailError && (
+                                        <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <span>{studentEmailError}</span>
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <Input
+                                        label="Password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={studentPassword}
+                                        onChange={(e) =>
+                                            handlePasswordChange(e, "student")
+                                        }
+                                        onBlur={() =>
+                                            handleBlur("studentPassword")
+                                        }
+                                        required
+                                        autoComplete="current-password"
+                                        className={
+                                            studentPasswordError
+                                                ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                                                : ""
+                                        }
+                                    />
+                                    {studentPasswordError && (
+                                        <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <span>{studentPasswordError}</span>
+                                        </p>
+                                    )}
+                                </div>
                             </>
                         ) : (
                             <>
-                                <Input
-                                    label="Admin Email Address"
-                                    type="email"
-                                    placeholder="admin@school.edu"
-                                    value={adminEmail}
-                                    onChange={(e) => {
-                                        setAdminEmail(e.target.value);
-                                        setError("");
-                                    }}
-                                    required
-                                />
-                                <Input
-                                    label="Admin Password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    value={adminPassword}
-                                    onChange={(e) => {
-                                        setAdminPassword(e.target.value);
-                                        setError("");
-                                    }}
-                                    required
-                                />
+                                <div>
+                                    <Input
+                                        label="Admin Email Address"
+                                        type="email"
+                                        placeholder="admin@school.edu"
+                                        value={adminEmail}
+                                        onChange={(e) =>
+                                            handleEmailChange(e, "admin")
+                                        }
+                                        onBlur={() => handleBlur("adminEmail")}
+                                        required
+                                        autoComplete="email"
+                                        className={
+                                            adminEmailError
+                                                ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                                                : ""
+                                        }
+                                    />
+                                    {adminEmailError && (
+                                        <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <span>{adminEmailError}</span>
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <Input
+                                        label="Admin Password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={adminPassword}
+                                        onChange={(e) =>
+                                            handlePasswordChange(e, "admin")
+                                        }
+                                        onBlur={() =>
+                                            handleBlur("adminPassword")
+                                        }
+                                        required
+                                        autoComplete="current-password"
+                                        className={
+                                            adminPasswordError
+                                                ? "border-red-300 focus:border-red-500 focus:ring-red-500"
+                                                : ""
+                                        }
+                                    />
+                                    {adminPasswordError && (
+                                        <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
+                                            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                                            <span>{adminPasswordError}</span>
+                                        </p>
+                                    )}
+                                </div>
                             </>
                         )}
+
+                        <div className="flex items-center justify-between text-sm">
+                            <div className="flex items-center">
+                                <input
+                                    id="remember-me"
+                                    name="remember-me"
+                                    type="checkbox"
+                                    className="h-4 w-4 text-green-900 focus:ring-green-900 border-gray-300 rounded cursor-pointer"
+                                />
+                                <label
+                                    htmlFor="remember-me"
+                                    className="ml-2 text-gray-600 cursor-pointer"
+                                >
+                                    Remember me
+                                </label>
+                            </div>
+                            <Link
+                                href="/forgot-password"
+                                className="text-green-900 font-semibold hover:underline"
+                            >
+                                Forgot password?
+                            </Link>
+                        </div>
 
                         <Button
                             type="submit"
@@ -280,6 +501,13 @@ export default function LoginPage() {
                         </Link>
                     </div>
                 </Card>
+
+                <div className="mt-8 text-center">
+                    <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        <p>Secure Connection • Encrypted • Official Portal</p>
+                    </div>
+                </div>
             </div>
         </div>
     );
