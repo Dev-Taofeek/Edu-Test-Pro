@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata = {
     title: "EduTest Pro - Secure CBT Platform",
     description: "AI-powered exam preparation and secure testing platform",
+    icons: {
+        icon: "/favicon.ico",
+    },
 };
 
 export default function RootLayout({ children }) {

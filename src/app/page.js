@@ -33,7 +33,7 @@ export default function LandingPage({ onLoginClick }) {
     return (
         <main className="flex flex-col overflow-hidden bg-green-50">
             {/* Hero Section */}
-            <section className="relative min-h-[95vh] flex items-center justify-center overflow-hidden bg-linear-to-br from-green-50 via-emerald-50 to-green-50">
+            <section className="relative min-h-fit flex items-center justify-center overflow-hidden bg-linear-to-br from-green-50 via-emerald-50 to-green-50">
                 {/* Square Grid Background */}
                 <div className="absolute inset-0 opacity-10">
                     <div
