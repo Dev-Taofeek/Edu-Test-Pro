@@ -1082,7 +1082,7 @@ export default function SignupPage() {
                                                             !prev.password,
                                                     }))
                                                 }
-                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
                                             >
                                                 {showPassword.password ? (
                                                     <EyeOff className="h-5 w-5" />
@@ -1151,7 +1151,7 @@ export default function SignupPage() {
                                                             !prev.confirmPassword,
                                                     }))
                                                 }
-                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
                                             >
                                                 {showPassword.confirmPassword ? (
                                                     <EyeOff className="h-5 w-5" />
@@ -1447,7 +1447,7 @@ export default function SignupPage() {
                                                             !prev.password,
                                                     }))
                                                 }
-                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
                                             >
                                                 {showPassword.password ? (
                                                     <EyeOff className="h-5 w-5" />
@@ -1516,7 +1516,7 @@ export default function SignupPage() {
                                                             !prev.confirmPassword,
                                                     }))
                                                 }
-                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                                className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
                                             >
                                                 {showPassword.confirmPassword ? (
                                                     <EyeOff className="h-5 w-5" />

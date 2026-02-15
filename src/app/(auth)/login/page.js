@@ -481,7 +481,7 @@ export default function LoginPage() {
                                                 !showAdminPassword,
                                             )
                                         }
-                                        className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                        className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
                                     >
                                         {showAdminPassword ? (
                                             <EyeOff className="h-5 w-5" />

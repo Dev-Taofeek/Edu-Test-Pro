@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     LayoutDashboard,
     FileText,
@@ -16,10 +16,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ProtectedDashboardLayout from "@/app/context/protectedDashboardLayout";
 import { useAuth } from "@/app/context/AuthContext";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function AdminDashboardLayout({ children }) {
     const { user, logout } = useAuth();
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [userData, setUserData] = useState(null);
+    const [isLoadingUserData, setIsLoadingUserData] = useState(true);
     const pathname = usePathname();
 
     const navigation = [
@@ -42,8 +46,31 @@ export default function AdminDashboardLayout({ children }) {
         { name: "Settings", href: "/dashboard/admin/settings", icon: Settings },
     ];
 
+    // Fetch user data from Firestore
+    useEffect(() => {
+        const fetchUserData = async () => {
+            if (!user?.uid) return;
+
+            try {
+                setIsLoadingUserData(true);
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+
+                if (userDoc.exists()) {
+                    const data = userDoc.data();
+                    setUserData(data);
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+            } finally {
+                setIsLoadingUserData(false);
+            }
+        };
+
+        fetchUserData();
+    }, [user?.uid]);
+
     // Show a loader if user is not yet available
-    if (!user) {
+    if (!user || isLoadingUserData) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-green-50">
                 <div className="text-center">
@@ -56,12 +83,11 @@ export default function AdminDashboardLayout({ children }) {
         );
     }
 
-    // Safe property accessors with defaults
-    const firstName = user?.firstName || "Admin";
-    const lastName = user?.lastName || "User";
-    const email = user?.email || "No email provided";
-    const schoolName =
-        user?.schoolName || user?.school?.name || "School Name Not Set";
+    // Safe property accessors with defaults - now using userData from Firestore
+    const firstName = userData?.firstName || user?.firstName || "Admin";
+    const lastName = userData?.lastName || user?.lastName || "User";
+    const email = userData?.email || user?.email || "No email provided";
+    const schoolName = userData?.schoolName || "School Name Not Set";
 
     return (
         <ProtectedDashboardLayout allowedRoles={["admin"]}>
