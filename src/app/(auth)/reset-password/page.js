@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import {
     Lock,
     Eye,
@@ -29,7 +29,7 @@ const PasswordRequirement = ({ met, text }) => (
     </li>
 );
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [newPassword, setNewPassword] = useState("");
@@ -493,5 +493,31 @@ export default function ResetPasswordPage() {
                 </div>
             </div>
         </main>
+    );
+}
+
+export default function ResetPasswordPage() {
+    return (
+        <Suspense
+            fallback={
+                <div className="grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-green-50">
+                    <div className="w-full max-w-md">
+                        <Card className="p-8 shadow-lg border-t-4 border-t-green-900 bg-white rounded-2xl">
+                            <div className="text-center">
+                                <div className="w-16 h-16 bg-green-900 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                    <Lock className="h-8 w-8 text-white" />
+                                </div>
+                                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                                    Loading...
+                                </h2>
+                                <p className="text-gray-600">Please wait...</p>
+                            </div>
+                        </Card>
+                    </div>
+                </div>
+            }
+        >
+            <ResetPasswordContent />
+        </Suspense>
     );
 }
