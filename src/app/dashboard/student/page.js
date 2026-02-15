@@ -27,6 +27,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { calculateGrade, getPassStatus } from "@/utils/gradeUtils";
+import Link from "next/link";
 
 export default function StudentDashboard() {
     const [examCode, setExamCode] = useState("");
@@ -49,8 +50,10 @@ export default function StudentDashboard() {
                 const studentRef = doc(db, "students", user.uid);
                 const studentSnap = await getDoc(studentRef);
 
+                let studentInfo = null;
                 if (studentSnap.exists()) {
-                    setStudentData(studentSnap.data());
+                    studentInfo = studentSnap.data();
+                    setStudentData(studentInfo);
                 }
 
                 // Fetch all published exams
@@ -66,16 +69,21 @@ export default function StudentDashboard() {
                     ...doc.data(),
                 }));
 
-                // Filter to only show public exams
+                // Filter to only show public exams that haven't been completed
+                const completedExamIds =
+                    studentInfo?.examsTaken?.map((exam) => exam.examId) || [];
+
                 const publicExams = exams.filter(
-                    (exam) => exam.visibility === "public",
+                    (exam) =>
+                        exam.visibility === "public" &&
+                        !completedExamIds.includes(exam.id),
                 );
 
                 setAvailableExams(publicExams);
 
                 // Fetch exam details for completed exams
-                if (studentSnap.exists()) {
-                    const examsTaken = studentSnap.data().examsTaken || [];
+                if (studentInfo) {
+                    const examsTaken = studentInfo.examsTaken || [];
                     const examDetailsMap = {};
 
                     for (const takenExam of examsTaken) {
@@ -201,7 +209,7 @@ export default function StudentDashboard() {
     }
 
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
             {/* Welcome Section */}
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
@@ -361,41 +369,20 @@ export default function StudentDashboard() {
                         </div>
                     ) : (
                         <div className="space-y-4 max-h-96 overflow-y-auto">
-                            {availableExams.map((exam) => {
-                                const alreadyTaken =
-                                    studentData?.examsTaken?.some(
-                                        (taken) => taken.examId === exam.id,
-                                    );
-
-                                return (
-                                    <div
-                                        key={exam.id}
-                                        className={`p-4 border-2 rounded-xl transition-colors ${
-                                            alreadyTaken
-                                                ? "border-gray-200 bg-gray-50 opacity-60"
-                                                : "border-gray-200 hover:border-green-700 cursor-pointer"
-                                        }`}
-                                        onClick={() => {
-                                            if (!alreadyTaken) {
-                                                setExamCode(exam.id);
-                                            }
-                                        }}
-                                    >
+                            {availableExams.map((exam) => (
+                                <Link
+                                    key={exam.id}
+                                    href={`/exam/${exam.id.trim()}`}
+                                >
+                                    <div className="p-4 border-2 rounded-xl transition-colors border-gray-200 hover:border-green-700 cursor-pointer">
                                         <div className="flex items-start justify-between mb-3">
                                             <h4 className="font-bold text-gray-900 flex-1">
                                                 {exam.title}
                                             </h4>
-                                            {alreadyTaken ? (
-                                                <div className="flex items-center gap-1 text-gray-600 bg-gray-100 px-2 py-1 rounded text-xs font-semibold">
-                                                    <CheckCircle className="h-3 w-3" />
-                                                    Completed
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-semibold">
-                                                    <Clock className="h-3 w-3" />
-                                                    Available
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-semibold">
+                                                <Clock className="h-3 w-3" />
+                                                Available
+                                            </div>
                                         </div>
 
                                         <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
@@ -416,8 +403,8 @@ export default function StudentDashboard() {
                                             </span>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                </Link>
+                            ))}
                         </div>
                     )}
                 </Card>
@@ -527,6 +514,6 @@ export default function StudentDashboard() {
                     </div>
                 </div>
             </Card>
-        </div>
+        </main>
     );
 }

@@ -56,6 +56,13 @@ export default function AdminDashboardLayout({ children }) {
         );
     }
 
+    // Safe property accessors with defaults
+    const firstName = user?.firstName || "Admin";
+    const lastName = user?.lastName || "User";
+    const email = user?.email || "No email provided";
+    const schoolName =
+        user?.schoolName || user?.school?.name || "School Name Not Set";
+
     return (
         <ProtectedDashboardLayout allowedRoles={["admin"]}>
             <div className="min-h-screen bg-gray-100">
@@ -101,10 +108,10 @@ export default function AdminDashboardLayout({ children }) {
                             </div>
                             <div>
                                 <p className="font-semibold text-sm">
-                                    {user.firstName} {user.lastName}
+                                    {firstName} {lastName}
                                 </p>
                                 <p className="text-xs text-gray-600">
-                                    {user.schoolName || "University Name"}
+                                    {schoolName}
                                 </p>
                             </div>
                         </div>
@@ -156,11 +163,9 @@ export default function AdminDashboardLayout({ children }) {
 
                         <div className="ml-auto text-right">
                             <p className="text-sm font-semibold">
-                                {user.firstName} {user.lastName}
+                                {firstName} {lastName}
                             </p>
-                            <p className="text-xs text-gray-500">
-                                {user.email}
-                            </p>
+                            <p className="text-xs text-gray-500">{email}</p>
                         </div>
                     </header>
 

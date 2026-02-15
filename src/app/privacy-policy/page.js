@@ -99,21 +99,6 @@ export default function PrivacyPolicy() {
                             Pro.
                         </p>
                     </section>
-
-                    {/* Contact */}
-                    <section>
-                        <h2 className="text-2xl font-bold text-slate-900 mb-3 flex items-center gap-2">
-                            <Mail className="w-5 h-5 text-emerald-600" />
-                            6. Contact Us
-                        </h2>
-                        <p>
-                            If you have questions about this Privacy Policy,
-                            please contact us at:
-                        </p>
-                        <p className="mt-2 font-semibold text-emerald-700">
-                            support@edutestpro.com
-                        </p>
-                    </section>
                 </div>
             </div>
         </main>

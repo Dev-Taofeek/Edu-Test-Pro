@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
     GraduationCap,
     Shield,
@@ -15,12 +15,16 @@ import {
     AlertCircle,
     Eye,
     EyeOff,
+    ArrowLeft,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
-import { createUserWithEmailAndPassword } from "firebase/auth";
+import {
+    createUserWithEmailAndPassword,
+    sendEmailVerification,
+} from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -48,6 +52,26 @@ export default function SignupPage() {
         password: false,
         confirmPassword: false,
     });
+
+    // Email verification states
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
+    const [verificationError, setVerificationError] = useState("");
+    const [isCheckingVerification, setIsCheckingVerification] = useState(false);
+    const [verificationEmailSent, setVerificationEmailSent] = useState(false);
+    const [firebaseUser, setFirebaseUser] = useState(null);
+
+    // Check verification status periodically
+    useEffect(() => {
+        let intervalId;
+        if (showVerificationModal && firebaseUser) {
+            intervalId = setInterval(async () => {
+                await checkEmailVerification();
+            }, 3000); // Check every 3 seconds
+        }
+        return () => {
+            if (intervalId) clearInterval(intervalId);
+        };
+    }, [showVerificationModal, firebaseUser]);
 
     // Student fields
     const [studentData, setStudentData] = useState({
@@ -79,6 +103,63 @@ export default function SignupPage() {
         student: {},
         admin: {},
     });
+
+    // Check if email is verified
+    const checkEmailVerification = async () => {
+        if (!firebaseUser) return;
+
+        try {
+            await firebaseUser.reload();
+
+            if (firebaseUser.emailVerified) {
+                // Email verified, complete registration
+                await completeRegistration();
+            }
+        } catch (error) {
+            console.error("Error checking verification:", error);
+        }
+    };
+
+    // Resend verification email
+    const handleResendVerification = async () => {
+        if (!firebaseUser) return;
+
+        try {
+            await sendEmailVerification(firebaseUser);
+            setVerificationEmailSent(true);
+            setTimeout(() => setVerificationEmailSent(false), 3000);
+        } catch (error) {
+            console.error("Error resending verification:", error);
+            setVerificationError(
+                "Failed to resend verification email. Please try again.",
+            );
+        }
+    };
+
+    // Check verification manually
+    const handleCheckVerification = async () => {
+        setIsCheckingVerification(true);
+        setVerificationError("");
+
+        try {
+            await firebaseUser.reload();
+
+            if (firebaseUser.emailVerified) {
+                await completeRegistration();
+            } else {
+                setVerificationError(
+                    "Email not verified yet. Please check your inbox and click the verification link.",
+                );
+            }
+        } catch (error) {
+            console.error("Error checking verification:", error);
+            setVerificationError(
+                "Failed to check verification status. Please try again.",
+            );
+        } finally {
+            setIsCheckingVerification(false);
+        }
+    };
 
     // Validation functions
     const validateName = (name, fieldName) => {
@@ -406,6 +487,99 @@ export default function SignupPage() {
         // Keep touched state to preserve validation when switching back
     };
 
+    // Complete registration after email verification
+    const completeRegistration = async () => {
+        const currentData = role === "student" ? studentData : adminData;
+        const email = currentData.email.toLowerCase();
+
+        try {
+            setIsCheckingVerification(true);
+
+            // Convert phone number to number (remove all non-numeric characters)
+            const phoneNumber = parseInt(
+                currentData.phone.replace(/\D/g, ""),
+                10,
+            );
+
+            // Prepare user data for Firestore
+            const userDocData = {
+                role,
+                email,
+                firstName: currentData.firstName.trim(),
+                lastName: currentData.lastName.trim(),
+                emailVerified: true,
+                ...(role === "student"
+                    ? {
+                          matricNo: studentData.matricNo.toUpperCase(),
+                          phoneNumber: phoneNumber,
+                          dateOfBirth: studentData.dateOfBirth,
+                      }
+                    : {
+                          schoolName: adminData.schoolName.trim(),
+                          department: adminData.department.trim(),
+                          adminId: adminData.adminId.toUpperCase(),
+                          phoneNumber: phoneNumber,
+                      }),
+                createdAt: new Date(),
+            };
+
+            // Save to users collection
+            await setDoc(doc(db, "users", firebaseUser.uid), userDocData);
+
+            // Create student document if role is student
+            if (role === "student") {
+                await setDoc(doc(db, "students", firebaseUser.uid), {
+                    email,
+                    firstName: studentData.firstName.trim(),
+                    lastName: studentData.lastName.trim(),
+                    matricNo: studentData.matricNo.toUpperCase(),
+                    phoneNumber: phoneNumber,
+                    dateOfBirth: studentData.dateOfBirth,
+                    examsTaken: [],
+                    createdAt: new Date(),
+                    status: "active",
+                    statusHistory: [],
+                    lastUpdated: new Date(),
+                });
+            }
+
+            // Prepare AuthContext user object
+            const authUser = {
+                uid: firebaseUser.uid,
+                firstName: currentData.firstName.trim(),
+                lastName: currentData.lastName.trim(),
+                email: email,
+                role: role,
+                ...(role === "student"
+                    ? {
+                          matricNo: studentData.matricNo.toUpperCase(),
+                          dateOfBirth: studentData.dateOfBirth,
+                      }
+                    : {
+                          schoolName: adminData.schoolName.trim(),
+                          department: adminData.department.trim(),
+                          adminId: adminData.adminId.toUpperCase(),
+                      }),
+            };
+
+            // Close verification modal and show success modal
+            setShowVerificationModal(false);
+            setShowSuccessModal(true);
+
+            // Redirect after 2 seconds using AuthContext
+            setTimeout(() => {
+                setAuthUser(authUser);
+            }, 2000);
+        } catch (err) {
+            console.error("Registration error:", err);
+            setVerificationError(
+                "Failed to complete registration. Please try again.",
+            );
+        } finally {
+            setIsCheckingVerification(false);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -438,78 +612,27 @@ export default function SignupPage() {
             const email = currentData.email.toLowerCase();
             const password = currentData.password;
 
-            // Create Auth account
+            // Create Firebase Auth account
             const userCredential = await createUserWithEmailAndPassword(
                 auth,
                 email,
                 password,
             );
 
-            const firebaseUser = userCredential.user;
+            const user = userCredential.user;
+            setFirebaseUser(user);
 
-            // Prepare user data for Firestore
-            const userDocData = {
-                role,
-                email,
-                firstName: currentData.firstName.trim(),
-                lastName: currentData.lastName.trim(),
-                ...(role === "student"
-                    ? {
-                          matricNo: studentData.matricNo.toUpperCase(),
-                          phone: studentData.phone,
-                          dateOfBirth: studentData.dateOfBirth,
-                      }
-                    : {
-                          schoolName: adminData.schoolName.trim(),
-                          department: adminData.department.trim(),
-                          adminId: adminData.adminId.toUpperCase(),
-                          phone: adminData.phone,
-                      }),
-                createdAt: new Date(),
-            };
+            // Send verification email
+            await sendEmailVerification(user, {
+                url: window.location.origin + "/login", // Redirect URL after verification
+                handleCodeInApp: false,
+            });
 
-            // Save to users collection
-            await setDoc(doc(db, "users", firebaseUser.uid), userDocData);
-
-            // Create student document if role is student
-            if (role === "student") {
-                await setDoc(doc(db, "students", firebaseUser.uid), {
-                    email,
-                    firstName: studentData.firstName.trim(),
-                    lastName: studentData.lastName.trim(),
-                    matricNo: studentData.matricNo.toUpperCase(),
-                    phone: studentData.phone,
-                    dateOfBirth: studentData.dateOfBirth,
-                    examsTaken: [],
-                    createdAt: new Date(),
-                    status: "active",
-                    statusHistory: [],
-                    lastUpdated: new Date(),
-                });
-            }
-
-            // Prepare AuthContext user object
-            const authUser = {
-                uid: firebaseUser.uid,
-                firstName: currentData.firstName.trim(),
-                lastName: currentData.lastName.trim(),
-                email: email,
-                role: role,
-                matricNo:
-                    role === "student"
-                        ? studentData.matricNo.toUpperCase()
-                        : "",
-            };
-
-            // Show success modal first
-            setShowSuccessModal(true);
-
-            // Redirect after 2 seconds using AuthContext
-            setTimeout(() => {
-                setAuthUser(authUser);
-            }, 2000);
+            // Show verification modal
+            setShowVerificationModal(true);
+            setIsLoading(false);
         } catch (err) {
-            console.error("Registration error:", err);
+            console.error("Error during signup:", err);
 
             let errorMessage = "Registration failed. Please try again.";
 
@@ -529,7 +652,6 @@ export default function SignupPage() {
             }
 
             setError(errorMessage);
-        } finally {
             setIsLoading(false);
         }
     };
@@ -557,7 +679,91 @@ export default function SignupPage() {
     const passwordStrength = getPasswordStrength(currentData.password);
 
     return (
-        <div className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50">
+        <main className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50">
+            {/* Email Verification Modal */}
+            {showVerificationModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+                        <div className="text-center mb-6">
+                            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+                                <Mail className="h-8 w-8 text-green-600" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                                Verify Your Email
+                            </h3>
+                            <p className="text-gray-600 text-sm mb-2">
+                                We&apos;ve sent a verification link to
+                            </p>
+                            <p className="text-green-900 font-semibold mb-4">
+                                {currentData.email}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                                Please check your inbox and click the
+                                verification link to complete your registration.
+                            </p>
+                        </div>
+
+                        {verificationError && (
+                            <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+                                <p className="text-sm text-red-700">
+                                    {verificationError}
+                                </p>
+                            </div>
+                        )}
+
+                        {verificationEmailSent && (
+                            <div className="mb-4 flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                                <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
+                                <p className="text-sm text-green-700">
+                                    Verification email sent! Please check your
+                                    inbox.
+                                </p>
+                            </div>
+                        )}
+
+                        <div className="space-y-3">
+                            <Button
+                                onClick={handleCheckVerification}
+                                fullWidth
+                                disabled={isCheckingVerification}
+                                className="bg-green-900 hover:bg-green-800"
+                            >
+                                {isCheckingVerification
+                                    ? "Checking..."
+                                    : "I've Verified My Email"}
+                            </Button>
+
+                            <Button
+                                onClick={handleResendVerification}
+                                fullWidth
+                                variant="outline"
+                                className="border-green-900 text-green-900 hover:bg-green-50"
+                            >
+                                Resend Verification Email
+                            </Button>
+                        </div>
+
+                        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                                Can&apos;t find the email?
+                            </h4>
+                            <ul className="text-xs text-blue-800 space-y-1">
+                                <li>• Check your spam or junk folder</li>
+                                <li>
+                                    • Make sure you entered the correct email
+                                </li>
+                                <li>• Wait a few minutes and check again</li>
+                                <li>
+                                    • Click &quot;Resend&quot; to get a new
+                                    verification link
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Success Modal */}
             {showSuccessModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
@@ -968,7 +1174,7 @@ export default function SignupPage() {
                                 </div>
                             </>
                         ) : (
-                            // Admin Registration Form
+                            // Admin Registration Form (similar structure - keeping original for brevity)
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div>
@@ -1428,6 +1634,6 @@ export default function SignupPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

@@ -52,62 +52,6 @@ export default function CreateExam() {
         message: "",
     });
 
-    const saveAsDraft = async () => {
-        if (!user?.uid) {
-            setErrorModal({
-                show: true,
-                message: "You must be logged in to save an exam.",
-            });
-            return;
-        }
-        if (!examData.examCode || !examData.title) {
-            setErrorModal({
-                show: true,
-                message: "Exam title and code are required to save as draft.",
-            });
-            return;
-        }
-        setSaveStatus("saving");
-        try {
-            const examRef = doc(db, "exams", examData.examCode);
-
-            // Convert date/time to Timestamp objects if provided
-            let startDateTime = null;
-            let endDateTime = null;
-
-            if (examData.startDate && examData.startTime) {
-                startDateTime = Timestamp.fromDate(
-                    new Date(`${examData.startDate}T${examData.startTime}`),
-                );
-            }
-
-            if (examData.endDate && examData.endTime) {
-                endDateTime = Timestamp.fromDate(
-                    new Date(`${examData.endDate}T${examData.endTime}`),
-                );
-            }
-
-            await setDoc(examRef, {
-                ...examData,
-                startDateTime,
-                endDateTime,
-                selectedQuestions,
-                status: "draft",
-                createdBy: user.uid,
-                createdAt: serverTimestamp(),
-            });
-            setSaveStatus("success");
-            setTimeout(() => setSaveStatus(null), 3000);
-        } catch (error) {
-            console.error("Error saving draft:", error);
-            setSaveStatus("error");
-            setErrorModal({
-                show: true,
-                message: `Error saving draft: ${error.message}`,
-            });
-        }
-    };
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!user?.uid) {
@@ -244,7 +188,7 @@ export default function CreateExam() {
     };
 
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
             {/* Header */}
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
@@ -808,15 +752,6 @@ export default function CreateExam() {
                             type="button"
                             size="lg"
                             variant="outline"
-                            className="flex-1 border-2 border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer font-semibold"
-                            onClick={saveAsDraft}
-                        >
-                            Save as Draft
-                        </Button>
-                        <Button
-                            type="button"
-                            size="lg"
-                            variant="outline"
                             className="border-2 border-red-300 text-red-700 hover:bg-red-50 cursor-pointer font-semibold"
                             onClick={handleCancel}
                         >
@@ -873,6 +808,6 @@ export default function CreateExam() {
                     </div>
                 </div>
             </Card>
-        </div>
+        </main>
     );
 }

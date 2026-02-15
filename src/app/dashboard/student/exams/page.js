@@ -181,7 +181,7 @@ export default function Exams() {
     }
 
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
             {/* Header */}
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
@@ -504,6 +504,6 @@ export default function Exams() {
                     </div>
                 </div>
             </Card>
-        </div>
+        </main>
     );
 }

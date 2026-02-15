@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Lock,
     Eye,
@@ -14,6 +14,9 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 const PasswordRequirement = ({ met, text }) => (
     <li className="flex items-center gap-2 text-sm">
@@ -27,6 +30,8 @@ const PasswordRequirement = ({ met, text }) => (
 );
 
 export default function ResetPasswordPage() {
+    const router = useRouter();
+    const searchParams = useSearchParams();
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
@@ -34,6 +39,54 @@ export default function ResetPasswordPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [error, setError] = useState("");
+    const [isVerifying, setIsVerifying] = useState(true);
+    const [oobCode, setOobCode] = useState(null);
+    const [userEmail, setUserEmail] = useState("");
+
+    // Get the oobCode from URL parameters and verify it
+    useEffect(() => {
+        const verifyResetCode = async () => {
+            const code = searchParams.get("oobCode");
+
+            if (!code) {
+                setError(
+                    "Invalid or missing reset link. Please request a new password reset.",
+                );
+                setIsVerifying(false);
+                return;
+            }
+
+            setOobCode(code);
+
+            try {
+                // Verify the reset code
+                const email = await verifyPasswordResetCode(auth, code);
+                setUserEmail(email);
+                setIsVerifying(false);
+            } catch (err) {
+                console.error("Error verifying reset code:", err);
+                let errorMessage =
+                    "This password reset link is invalid or has expired.";
+
+                if (err.code === "auth/expired-action-code") {
+                    errorMessage =
+                        "This password reset link has expired. Please request a new one.";
+                } else if (err.code === "auth/invalid-action-code") {
+                    errorMessage =
+                        "This password reset link is invalid or has already been used.";
+                } else if (err.code === "auth/user-disabled") {
+                    errorMessage = "This account has been disabled.";
+                } else if (err.code === "auth/user-not-found") {
+                    errorMessage = "No account found with this email address.";
+                }
+
+                setError(errorMessage);
+                setIsVerifying(false);
+            }
+        };
+
+        verifyResetCode();
+    }, [searchParams]);
 
     // Password strength validation
     const hasMinLength = newPassword.length >= 8;
@@ -48,7 +101,7 @@ export default function ResetPasswordPage() {
         newPassword === confirmPassword && confirmPassword !== "";
     const isFormValid = isPasswordStrong && passwordsMatch;
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
 
@@ -62,17 +115,127 @@ export default function ResetPasswordPage() {
             return;
         }
 
+        if (!oobCode) {
+            setError(
+                "Invalid reset link. Please request a new password reset.",
+            );
+            return;
+        }
+
         setIsLoading(true);
 
-        // Simulate API call
-        setTimeout(() => {
+        try {
+            // Confirm the password reset with Firebase
+            await confirmPasswordReset(auth, oobCode, newPassword);
+
             setIsSuccess(true);
             setIsLoading(false);
-        }, 1500);
+
+            // Redirect to login after 3 seconds
+            setTimeout(() => {
+                router.push("/login");
+            }, 3000);
+        } catch (err) {
+            console.error("Error resetting password:", err);
+
+            let errorMessage = "Failed to reset password. Please try again.";
+
+            if (err.code === "auth/expired-action-code") {
+                errorMessage =
+                    "This reset link has expired. Please request a new one.";
+            } else if (err.code === "auth/invalid-action-code") {
+                errorMessage =
+                    "This reset link is invalid or has already been used.";
+            } else if (err.code === "auth/weak-password") {
+                errorMessage =
+                    "Password is too weak. Please choose a stronger password.";
+            } else if (err.code === "auth/user-disabled") {
+                errorMessage = "This account has been disabled.";
+            } else if (err.code === "auth/user-not-found") {
+                errorMessage =
+                    "No account found. The account may have been deleted.";
+            }
+
+            setError(errorMessage);
+            setIsLoading(false);
+        }
     };
 
+    // Show loading state while verifying the reset code
+    if (isVerifying) {
+        return (
+            <div className="grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-green-50">
+                <div className="w-full max-w-md">
+                    <Card className="p-8 shadow-lg border-t-4 border-t-green-900 bg-white rounded-2xl">
+                        <div className="text-center">
+                            <div className="w-16 h-16 bg-green-900 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+                                <Lock className="h-8 w-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                                Verifying Reset Link
+                            </h2>
+                            <p className="text-gray-600">Please wait...</p>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
+    // Show error if code verification failed
+    if (error && !oobCode) {
+        return (
+            <div className="grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-green-50">
+                <div className="w-full max-w-md">
+                    <div className="text-center mb-8">
+                        <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <AlertCircle className="h-8 w-8 text-red-600" />
+                        </div>
+                        <h2 className="text-3xl sm:text-4xl font-bold text-gray-900">
+                            Invalid Reset Link
+                        </h2>
+                        <p className="mt-2 text-lg text-gray-600">{error}</p>
+                    </div>
+
+                    <Card className="p-8 shadow-lg border-t-4 border-t-red-600 bg-white rounded-2xl">
+                        <div className="space-y-4">
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                                <p className="text-sm text-gray-700">
+                                    Password reset links expire after a certain
+                                    time for security reasons. Please request a
+                                    new password reset link.
+                                </p>
+                            </div>
+
+                            <Link href="/forgot-password">
+                                <Button
+                                    fullWidth
+                                    size="lg"
+                                    className="bg-green-900 hover:bg-green-800 cursor-pointer text-white font-bold py-4"
+                                >
+                                    Request New Reset Link
+                                </Button>
+                            </Link>
+
+                            <Link href="/login">
+                                <Button
+                                    fullWidth
+                                    size="lg"
+                                    variant="outline"
+                                    className="border-gray-300 hover:bg-gray-50 cursor-pointer"
+                                >
+                                    Back to Login
+                                </Button>
+                            </Link>
+                        </div>
+                    </Card>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-green-50">
+        <main className="grow flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-green-50">
             <div className="w-full max-w-md">
                 {!isSuccess ? (
                     <>
@@ -86,6 +249,11 @@ export default function ResetPasswordPage() {
                             <p className="mt-2 text-lg text-gray-600">
                                 Create a new password for your account
                             </p>
+                            {userEmail && (
+                                <p className="mt-1 text-sm text-gray-500">
+                                    {userEmail}
+                                </p>
+                            )}
                         </div>
 
                         <Card className="p-8 shadow-lg border-t-4 border-t-green-900 bg-white rounded-2xl">
@@ -105,6 +273,7 @@ export default function ResetPasswordPage() {
                                                 setNewPassword(e.target.value)
                                             }
                                             required
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -170,6 +339,7 @@ export default function ResetPasswordPage() {
                                                 )
                                             }
                                             required
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -266,7 +436,7 @@ export default function ResetPasswordPage() {
                                     <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
                                     <p className="text-gray-700 mb-4">
                                         You can now log in with your new
-                                        password
+                                        password. Redirecting...
                                     </p>
                                     <Link href="/login">
                                         <Button
@@ -322,6 +492,6 @@ export default function ResetPasswordPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

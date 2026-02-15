@@ -20,12 +20,52 @@ export function AuthProvider({ children }) {
         });
     }, []);
 
-    const setAuthUser = (userData) => {
+    // Fetch complete user information from your backend
+    const fetchCompleteUserData = async (userId, token) => {
         try {
-            localStorage.setItem("user", JSON.stringify(userData));
-            setUser(userData);
+            const response = await fetch(`/api/users/${userId}`, {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+            });
+
+            if (!response.ok) throw new Error("Failed to fetch user data");
+
+            const userData = await response.json();
+            return userData;
+        } catch (error) {
+            console.error("Failed to fetch complete user data:", error);
+            throw error;
+        }
+    };
+
+    const setAuthUser = async (userData) => {
+        try {
+            // If userData has a token/id, fetch complete information from backend
+            let completeUserData = userData;
+
+            if (userData.id && userData.token) {
+                try {
+                    completeUserData = await fetchCompleteUserData(
+                        userData.id,
+                        userData.token,
+                    );
+                } catch (error) {
+                    console.warn(
+                        "Could not fetch full user data, using provided data:",
+                        error,
+                    );
+                    completeUserData = userData;
+                }
+            }
+
+            // Store the complete user data
+            localStorage.setItem("user", JSON.stringify(completeUserData));
+            setUser(completeUserData);
+
             const targetPath =
-                userData.role === "admin"
+                completeUserData.role === "admin"
                     ? "/dashboard/admin"
                     : "/dashboard/student";
 

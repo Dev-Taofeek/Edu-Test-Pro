@@ -18,6 +18,8 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
+import { EyeOff } from "lucide-react";
+import { Eye } from "lucide-react";
 
 // Email validation regex - RFC 5322 compliant
 const EMAIL_REGEX =
@@ -30,6 +32,8 @@ export default function LoginPage() {
     const [error, setError] = useState("");
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [userName, setUserName] = useState("");
+    const [showStudentPassword, setShowStudentPassword] = useState(false);
+    const [showAdminPassword, setShowAdminPassword] = useState(false);
 
     // Student fields
     const [studentEmail, setStudentEmail] = useState("");
@@ -264,7 +268,7 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50 min-h-screen">
+        <main className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50 min-h-screen">
             {/* Success Modal */}
             {showSuccessModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
@@ -371,10 +375,14 @@ export default function LoginPage() {
                                     )}
                                 </div>
 
-                                <div>
+                                <div className="relative">
                                     <Input
                                         label="Password"
-                                        type="password"
+                                        type={
+                                            showStudentPassword
+                                                ? "text"
+                                                : "password"
+                                        }
                                         placeholder="••••••••"
                                         value={studentPassword}
                                         onChange={(e) =>
@@ -391,6 +399,21 @@ export default function LoginPage() {
                                                 : ""
                                         }
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowStudentPassword(
+                                                !showStudentPassword,
+                                            )
+                                        }
+                                        className="absolute right-3 top-9 text-gray-400 hover:text-gray-600 cursor-pointer"
+                                    >
+                                        {showStudentPassword ? (
+                                            <EyeOff className="h-5 w-5" />
+                                        ) : (
+                                            <Eye className="h-5 w-5" />
+                                        )}
+                                    </button>
                                     {studentPasswordError && (
                                         <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
                                             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -427,10 +450,14 @@ export default function LoginPage() {
                                     )}
                                 </div>
 
-                                <div>
+                                <div className="relative">
                                     <Input
                                         label="Admin Password"
-                                        type="password"
+                                        type={
+                                            showAdminPassword
+                                                ? "text"
+                                                : "password"
+                                        }
                                         placeholder="••••••••"
                                         value={adminPassword}
                                         onChange={(e) =>
@@ -447,6 +474,21 @@ export default function LoginPage() {
                                                 : ""
                                         }
                                     />
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setShowAdminPassword(
+                                                !showAdminPassword,
+                                            )
+                                        }
+                                        className="absolute right-3 top-9 text-gray-400 hover:text-gray-600"
+                                    >
+                                        {showAdminPassword ? (
+                                            <EyeOff className="h-5 w-5" />
+                                        ) : (
+                                            <Eye className="h-5 w-5" />
+                                        )}
+                                    </button>
                                     {adminPasswordError && (
                                         <p className="mt-2 text-sm text-red-600 flex items-start gap-1">
                                             <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -509,6 +551,6 @@ export default function LoginPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

@@ -111,7 +111,7 @@ export default function AdminDashboard() {
     }
 
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
                     Admin Dashboard
@@ -556,6 +556,6 @@ export default function AdminDashboard() {
                     )}
                 </div>
             </Card>
-        </div>
+        </main>
     );
 }

@@ -138,10 +138,6 @@ export default function ExamPage() {
         setExamStarted(true);
     };
 
-    const handleSaveForLater = () => {
-        router.push("/dashboard");
-    };
-
     const handleSelectAnswer = (questionIndex, optionId) => {
         setAnswers({
             ...answers,
@@ -588,15 +584,6 @@ export default function ExamPage() {
                         <div className="p-6 sm:p-8 bg-gray-50">
                             <div className="flex flex-col sm:flex-row gap-4">
                                 <Button
-                                    onClick={handleSaveForLater}
-                                    variant="outline"
-                                    size="lg"
-                                    className="flex-1 border-2 border-gray-300 hover:bg-gray-100 cursor-pointer"
-                                >
-                                    <Save className="mr-2 h-5 w-5" />
-                                    Save for Later
-                                </Button>
-                                <Button
                                     onClick={handleStartExam}
                                     size="lg"
                                     className="flex-1 bg-green-900 hover:bg-green-800 text-white font-bold cursor-pointer"
@@ -614,7 +601,7 @@ export default function ExamPage() {
 
     // Exam Interface
     return (
-        <div className="min-h-screen bg-gray-50">
+        <main className="min-h-screen bg-gray-50">
             {/* Fixed Header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -846,6 +833,6 @@ export default function ExamPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

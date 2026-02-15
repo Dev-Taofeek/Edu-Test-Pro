@@ -132,7 +132,7 @@ export default function ForgotPasswordPage() {
     };
 
     return (
-        <div className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50">
+        <main className="grow flex items-center justify-center py-8 px-4 sm:px-6 lg:px-8 bg-green-50">
             <div className="w-full max-w-md">
                 {!isSuccess ? (
                     <>
@@ -241,8 +241,8 @@ export default function ForgotPasswordPage() {
                                         <li className="flex items-start">
                                             <div className="w-1.5 h-1.5 bg-green-700 rounded-full mt-2 mr-3 shrink-0" />
                                             <span>
-                                                Check your inbox for an email
-                                                from EduTest Pro
+                                                Check your inbox or spam for an
+                                                email from EduTest Pro
                                             </span>
                                         </li>
                                         <li className="flex items-start">
@@ -305,6 +305,6 @@ export default function ForgotPasswordPage() {
                     </div>
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

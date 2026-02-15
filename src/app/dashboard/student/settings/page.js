@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
     User,
     Mail,
@@ -15,27 +15,43 @@ import {
     Camera,
     AlertCircle,
     CheckCircle,
+    Upload,
+    GraduationCap,
 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/app/context/AuthContext";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import {
+    updatePassword,
+    EmailAuthProvider,
+    reauthenticateWithCredential,
+} from "firebase/auth";
+import { db, auth } from "@/lib/firebase";
 
 export default function Settings() {
-    const [activeTab, setActiveTab] = useState("profile"); // profile, security, notifications, preferences
-    const { user } = useAuth();
+    const [activeTab, setActiveTab] = useState("profile");
+    const { user, setAuthUser } = useAuth();
 
     // Profile data
     const [profileData, setProfileData] = useState({
-        firstName: "John",
-        lastName: "Doe",
-        email: "john.doe@example.com",
-        matricNo: "2024/001",
-        phone: "+234 800 000 0000",
-        dateOfBirth: "2000-01-15",
-        department: "Computer Science",
-        level: "400 Level",
+        firstName: "",
+        lastName: "",
+        email: "",
+        matricNo: "",
+        phoneNumber: "",
+        dateOfBirth: "",
+        photoURL: "",
     });
+
+    const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+    // Image upload refs
+    const fileInputRef = useRef(null);
+    const cameraInputRef = useRef(null);
+    const [showImageOptions, setShowImageOptions] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
 
     // Security data
     const [currentPassword, setCurrentPassword] = useState("");
@@ -57,34 +73,341 @@ export default function Settings() {
     const [preferences, setPreferences] = useState({
         language: "en",
         timezone: "WAT",
-        theme: "light",
     });
 
     const [saveStatus, setSaveStatus] = useState(null);
 
-    const handleProfileUpdate = (e) => {
-        e.preventDefault();
-        setSaveStatus("saving");
-        setTimeout(() => {
-            setSaveStatus("success");
-            setTimeout(() => setSaveStatus(null), 3000);
-        }, 1000);
+    // Fetch user data from Firestore on mount
+    useEffect(() => {
+        const fetchUserData = async () => {
+            if (!user?.uid) return;
+
+            try {
+                setIsLoadingProfile(true);
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+
+                    // Format phone number for display (remove country code if present)
+                    let displayPhone = "";
+                    if (userData.phoneNumber) {
+                        const phoneStr = userData.phoneNumber.toString();
+                        // If starts with 234, remove it and show last 10 digits
+                        if (
+                            phoneStr.startsWith("234") &&
+                            phoneStr.length === 13
+                        ) {
+                            displayPhone = phoneStr.slice(3);
+                        } else {
+                            displayPhone = phoneStr;
+                        }
+                    }
+
+                    setProfileData({
+                        firstName: userData.firstName || "",
+                        lastName: userData.lastName || "",
+                        email: userData.email || "",
+                        matricNo: userData.matricNo || "",
+                        phoneNumber: displayPhone,
+                        dateOfBirth: userData.dateOfBirth || "",
+                        photoURL: userData.photoURL || "",
+                    });
+
+                    // Load notification preferences if they exist
+                    if (userData.notificationPreferences) {
+                        setNotifications(userData.notificationPreferences);
+                    }
+
+                    // Load general preferences if they exist
+                    if (userData.preferences) {
+                        setPreferences(userData.preferences);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching user data:", error);
+                setSaveStatus("error");
+            } finally {
+                setIsLoadingProfile(false);
+            }
+        };
+
+        fetchUserData();
+    }, [user?.uid]);
+
+    // Compress image to reduce size
+    const compressImage = (
+        file,
+        maxWidth = 500,
+        maxHeight = 500,
+        quality = 0.8,
+    ) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+
+            reader.onload = (event) => {
+                const img = document.createElement("img");
+                img.src = event.target.result;
+
+                img.onload = () => {
+                    const canvas = document.createElement("canvas");
+                    let width = img.width;
+                    let height = img.height;
+
+                    // Calculate new dimensions
+                    if (width > height) {
+                        if (width > maxWidth) {
+                            height *= maxWidth / width;
+                            width = maxWidth;
+                        }
+                    } else {
+                        if (height > maxHeight) {
+                            width *= maxHeight / height;
+                            height = maxHeight;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext("2d");
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to base64 with compression
+                    const compressedBase64 = canvas.toDataURL(
+                        "image/jpeg",
+                        quality,
+                    );
+                    resolve(compressedBase64);
+                };
+
+                img.onerror = reject;
+            };
+
+            reader.onerror = reject;
+        });
     };
 
-    const handlePasswordChange = (e) => {
+    // Handle image upload
+    const handleImageUpload = async (file) => {
+        if (!file) return;
+
+        // Validate file type
+        const validTypes = ["image/png", "image/jpeg", "image/jpg"];
+        if (!validTypes.includes(file.type)) {
+            alert("Please upload a PNG or JPG image");
+            return;
+        }
+
+        // Validate file size (5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert("Image size should be less than 5MB");
+            return;
+        }
+
+        try {
+            setUploadingImage(true);
+
+            // Compress image to base64
+            const compressedBase64 = await compressImage(file);
+
+            // Check if compressed size is reasonable
+            const sizeInBytes = (compressedBase64.length * 3) / 4;
+            if (sizeInBytes > 700000) {
+                alert(
+                    "Image is too large even after compression. Please use a smaller image.",
+                );
+                setUploadingImage(false);
+                return;
+            }
+
+            // Update Firestore
+            await updateDoc(doc(db, "users", user.uid), {
+                photoURL: compressedBase64,
+            });
+
+            // Also update students collection if exists
+            try {
+                await updateDoc(doc(db, "students", user.uid), {
+                    photoURL: compressedBase64,
+                });
+            } catch (error) {
+                console.log("No student document to update");
+            }
+
+            // Update local state
+            setProfileData((prev) => ({ ...prev, photoURL: compressedBase64 }));
+
+            // Update AuthContext
+            setAuthUser({ ...user, photoURL: compressedBase64 });
+
+            setSaveStatus("success");
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (error) {
+            console.error("Error uploading image:", error);
+            alert("Failed to upload image. Please try again.");
+        } finally {
+            setUploadingImage(false);
+            setShowImageOptions(false);
+        }
+    };
+
+    const handleCameraCapture = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageUpload(file);
+        }
+    };
+
+    const handleFileSelect = (e) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            handleImageUpload(file);
+        }
+    };
+
+    const handleProfileUpdate = async (e) => {
         e.preventDefault();
+        setSaveStatus("saving");
+
+        try {
+            // Clean phone number (remove spaces, dashes, etc.)
+            const cleanPhone = profileData.phoneNumber.replace(/\D/g, "");
+
+            // Validate phone is 10 digits
+            if (cleanPhone.length !== 10) {
+                alert("Phone number must be 10 digits");
+                setSaveStatus("error");
+                setTimeout(() => setSaveStatus(null), 3000);
+                return;
+            }
+
+            // Add country code and convert to number
+            const fullPhoneNumber = parseInt(`234${cleanPhone}`, 10);
+
+            // Only update fields that can be changed
+            const updates = {
+                firstName: profileData.firstName.trim(),
+                lastName: profileData.lastName.trim(),
+                phoneNumber: fullPhoneNumber,
+                dateOfBirth: profileData.dateOfBirth,
+            };
+
+            // Update users collection
+            await updateDoc(doc(db, "users", user.uid), updates);
+
+            // Update students collection
+            try {
+                await updateDoc(doc(db, "students", user.uid), {
+                    firstName: updates.firstName,
+                    lastName: updates.lastName,
+                    phoneNumber: updates.phoneNumber,
+                    dateOfBirth: updates.dateOfBirth,
+                });
+            } catch (error) {
+                console.log("No student document to update");
+            }
+
+            // Update AuthContext
+            setAuthUser({
+                ...user,
+                firstName: updates.firstName,
+                lastName: updates.lastName,
+            });
+
+            setSaveStatus("success");
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (error) {
+            console.error("Error updating profile:", error);
+            setSaveStatus("error");
+            setTimeout(() => setSaveStatus(null), 3000);
+        }
+    };
+
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+
         if (newPassword !== confirmPassword) {
+            alert("Passwords do not match");
             setSaveStatus("error");
             return;
         }
+
+        if (newPassword.length < 8) {
+            alert("Password must be at least 8 characters long");
+            return;
+        }
+
         setSaveStatus("saving");
-        setTimeout(() => {
+
+        try {
+            const currentUser = auth.currentUser;
+
+            // Reauthenticate user
+            const credential = EmailAuthProvider.credential(
+                currentUser.email,
+                currentPassword,
+            );
+            await reauthenticateWithCredential(currentUser, credential);
+
+            // Update password
+            await updatePassword(currentUser, newPassword);
+
             setSaveStatus("success");
             setCurrentPassword("");
             setNewPassword("");
             setConfirmPassword("");
             setTimeout(() => setSaveStatus(null), 3000);
-        }, 1000);
+        } catch (error) {
+            console.error("Error updating password:", error);
+
+            let errorMessage = "Failed to update password";
+            if (error.code === "auth/wrong-password") {
+                errorMessage = "Current password is incorrect";
+            } else if (error.code === "auth/weak-password") {
+                errorMessage = "Password is too weak";
+            }
+
+            alert(errorMessage);
+            setSaveStatus("error");
+            setTimeout(() => setSaveStatus(null), 3000);
+        }
+    };
+
+    const handleNotificationUpdate = async () => {
+        setSaveStatus("saving");
+
+        try {
+            await updateDoc(doc(db, "users", user.uid), {
+                notificationPreferences: notifications,
+            });
+
+            setSaveStatus("success");
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (error) {
+            console.error("Error updating notifications:", error);
+            setSaveStatus("error");
+            setTimeout(() => setSaveStatus(null), 3000);
+        }
+    };
+
+    const handlePreferencesUpdate = async (e) => {
+        e.preventDefault();
+        setSaveStatus("saving");
+
+        try {
+            await updateDoc(doc(db, "users", user.uid), {
+                preferences: preferences,
+            });
+
+            setSaveStatus("success");
+            setTimeout(() => setSaveStatus(null), 3000);
+        } catch (error) {
+            console.error("Error updating preferences:", error);
+            setSaveStatus("error");
+            setTimeout(() => setSaveStatus(null), 3000);
+        }
     };
 
     const tabs = [
@@ -94,8 +417,36 @@ export default function Settings() {
         { key: "preferences", label: "Preferences", icon: Shield },
     ];
 
+    if (isLoadingProfile) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="w-16 h-16 border-4 border-green-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading settings...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
+            {/* Hidden file inputs */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png, image/jpeg, image/jpg"
+                onChange={handleFileSelect}
+                className="hidden"
+            />
+            <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleCameraCapture}
+                className="hidden"
+            />
+
             {/* Header */}
             <div>
                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
@@ -147,7 +498,7 @@ export default function Settings() {
                             <>
                                 <AlertCircle className="h-5 w-5 text-red-600" />
                                 <p className="text-sm font-semibold text-red-900">
-                                    Passwords do not match. Please try again.
+                                    An error occurred. Please try again.
                                 </p>
                             </>
                         ) : (
@@ -170,33 +521,6 @@ export default function Settings() {
                             Profile Information
                         </h3>
 
-                        {/* Profile Picture */}
-                        <div className="flex items-center gap-6 mb-8">
-                            <div className="relative">
-                                <div className="w-24 h-24 bg-green-900 rounded-2xl flex items-center justify-center">
-                                    <User className="h-12 w-12 text-white" />
-                                </div>
-                                <button className="absolute -bottom-2 -right-2 w-10 h-10 bg-green-900 hover:bg-green-800 rounded-full flex items-center justify-center cursor-pointer shadow-lg">
-                                    <Camera className="h-5 w-5 text-white" />
-                                </button>
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-gray-900 mb-1">
-                                    Profile Picture
-                                </h4>
-                                <p className="text-sm text-gray-600 mb-3">
-                                    PNG, JPG up to 5MB
-                                </p>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-2 border-gray-300 text-gray-700 hover:bg-gray-50 cursor-pointer font-semibold"
-                                >
-                                    Upload Photo
-                                </Button>
-                            </div>
-                        </div>
-
                         <form
                             onSubmit={handleProfileUpdate}
                             className="space-y-6"
@@ -205,7 +529,7 @@ export default function Settings() {
                                 <Input
                                     label="First Name"
                                     type="text"
-                                    value={user.firstName}
+                                    value={profileData.firstName}
                                     onChange={(e) =>
                                         setProfileData({
                                             ...profileData,
@@ -217,7 +541,7 @@ export default function Settings() {
                                 <Input
                                     label="Last Name"
                                     type="text"
-                                    value={user.lastName}
+                                    value={profileData.lastName}
                                     onChange={(e) =>
                                         setProfileData({
                                             ...profileData,
@@ -231,41 +555,54 @@ export default function Settings() {
                             <Input
                                 label="Email Address"
                                 type="email"
-                                value={user.email}
-                                onChange={(e) =>
-                                    setProfileData({
-                                        ...profileData,
-                                        email: e.target.value,
-                                    })
-                                }
-                                required
+                                value={profileData.email}
+                                disabled
+                                className="bg-gray-50"
                             />
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <Input
                                     label="Matric Number"
                                     type="text"
-                                    value={user.matricNo}
+                                    value={profileData.matricNo}
                                     disabled
+                                    className="bg-gray-50"
                                 />
-                                <Input
-                                    label="Phone Number"
-                                    type="tel"
-                                    value={user.phone}
-                                    onChange={(e) =>
-                                        setProfileData({
-                                            ...profileData,
-                                            phone: e.target.value,
-                                        })
-                                    }
-                                />
+                                <div>
+                                    <Input
+                                        label="Phone Number"
+                                        type="tel"
+                                        placeholder="8012345678"
+                                        value={profileData.phoneNumber}
+                                        onChange={(e) => {
+                                            // Only allow numbers
+                                            const value =
+                                                e.target.value.replace(
+                                                    /\D/g,
+                                                    "",
+                                                );
+                                            // Limit to 10 digits
+                                            if (value.length <= 10) {
+                                                setProfileData({
+                                                    ...profileData,
+                                                    phoneNumber: value,
+                                                });
+                                            }
+                                        }}
+                                        maxLength={10}
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        10 digits (234 will be added
+                                        automatically)
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <Input
                                     label="Date of Birth"
                                     type="date"
-                                    value={user.dateOfBirth}
+                                    value={profileData.dateOfBirth}
                                     onChange={(e) =>
                                         setProfileData({
                                             ...profileData,
@@ -504,7 +841,7 @@ export default function Settings() {
                         <div className="mt-6">
                             <Button
                                 size="lg"
-                                onClick={handleProfileUpdate}
+                                onClick={handleNotificationUpdate}
                                 className="bg-green-900 hover:bg-green-800 cursor-pointer text-white font-bold"
                             >
                                 <Save className="mr-2 h-5 w-5" />
@@ -524,7 +861,7 @@ export default function Settings() {
                         </h3>
 
                         <form
-                            onSubmit={handleProfileUpdate}
+                            onSubmit={handlePreferencesUpdate}
                             className="space-y-6"
                         >
                             <div>
@@ -573,28 +910,6 @@ export default function Settings() {
                                 </select>
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Theme
-                                </label>
-                                <select
-                                    value={preferences.theme}
-                                    onChange={(e) =>
-                                        setPreferences({
-                                            ...preferences,
-                                            theme: e.target.value,
-                                        })
-                                    }
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-900 focus:border-transparent"
-                                >
-                                    <option value="light">Light</option>
-                                    <option value="dark">Dark</option>
-                                    <option value="system">
-                                        System Default
-                                    </option>
-                                </select>
-                            </div>
-
                             <Button
                                 type="submit"
                                 size="lg"
@@ -607,6 +922,6 @@ export default function Settings() {
                     </Card>
                 </div>
             )}
-        </div>
+        </main>
     );
 }

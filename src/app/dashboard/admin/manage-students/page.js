@@ -457,7 +457,7 @@ export default function ManageStudents() {
     }
 
     return (
-        <div className="space-y-6">
+        <main className="space-y-6">
             {/* Modal */}
             {selectedStudent && (
                 <StudentDetailModal
@@ -772,6 +772,6 @@ export default function ManageStudents() {
                     ))
                 )}
             </div>
-        </div>
+        </main>
     );
 }

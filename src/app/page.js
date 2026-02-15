@@ -124,7 +124,7 @@ export default function LandingPage({ onLoginClick }) {
                                              bg-emerald-600 hover:bg-emerald-700
                                              text-white text-base sm:text-lg font-bold rounded-2xl
                                              shadow-2xl shadow-emerald-500/50
-                                             hover:shadow-emerald-500/70 hover:scale-105
+                                             hover:shadow-emerald-500/70
                                              transition-all duration-300 cursor-pointer"
                                 >
                                     <span className="flex items-center justify-center gap-2">
