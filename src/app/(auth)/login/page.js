@@ -15,7 +15,10 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import {
+    signInWithEmailAndPassword,
+    sendEmailVerification,
+} from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
@@ -298,6 +301,20 @@ export default function LoginPage() {
             const isVerifiedNow = firebaseUser.emailVerified || isScreenshotUser;
 
             if (!isVerifiedNow) {
+                // Don't just tell them to "check their inbox" — actually send
+                // a fresh verification email, since the first one may have
+                // been missed, expired, or never arrived.
+                try {
+                    await sendEmailVerification(firebaseUser);
+                } catch (resendErr) {
+                    // Firebase throttles repeated requests (auth/too-many-requests)
+                    // if someone retries within a short window — that's fine,
+                    // it just means an email is already on its way.
+                    console.error(
+                        "Failed to resend verification email:",
+                        resendErr,
+                    );
+                }
                 await auth.signOut();
                 throw new Error("email_not_verified");
             }
@@ -343,7 +360,7 @@ export default function LoginPage() {
             if (msg === "email_not_verified") {
                 toast.error(
                     "Email not verified",
-                    "Please complete registration by clicking the link we sent to your inbox.",
+                    "We've sent a new verification link to your inbox. Please check your email to continue.",
                 );
             } else if (msg.startsWith("role_mismatch:")) {
                 const actual = msg.split(":")[1];
