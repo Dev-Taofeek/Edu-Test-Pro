@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/app/context/AuthContext";
 
@@ -285,14 +285,33 @@ export default function LoginPage() {
 
             const userData = userDoc.data();
 
-            // Guard: block accounts that never completed email verification
+            // Guard: block accounts that never completed email verification.
+            // Firestore's emailVerified flag is only ever set at signup (false)
+            // and is never updated when the user actually clicks the link in
+            // their inbox — that happens entirely outside our app. So the real
+            // source of truth is the live Firebase Auth user, refreshed here.
             const isScreenshotUser =
-    userData.email?.toLowerCase() === SCREENSHOT_USER_EMAIL.toLowerCase();
+                userData.email?.toLowerCase() ===
+                SCREENSHOT_USER_EMAIL.toLowerCase();
 
-if (!userData.emailVerified && !isScreenshotUser) {
-    await auth.signOut();
-    throw new Error("email_not_verified");
-}
+            await firebaseUser.reload();
+            const isVerifiedNow = firebaseUser.emailVerified || isScreenshotUser;
+
+            if (!isVerifiedNow) {
+                await auth.signOut();
+                throw new Error("email_not_verified");
+            }
+
+            // Keep Firestore in sync now that we know the real status, so any
+            // other part of the app reading userData.emailVerified stays accurate.
+            if (firebaseUser.emailVerified && !userData.emailVerified) {
+                await setDoc(
+                    doc(db, "users", firebaseUser.uid),
+                    { emailVerified: true },
+                    { merge: true },
+                );
+                userData.emailVerified = true;
+            }
 
             // Guard: role mismatch
             if (userData.role !== role) {
