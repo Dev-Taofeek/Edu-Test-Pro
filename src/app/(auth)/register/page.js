@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
 import {
     GraduationCap,
     Shield,
@@ -22,7 +22,6 @@ import {
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { useAuth } from "@/app/context/AuthContext";
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -30,16 +29,16 @@ function Toast({ id, type, title, message, onDismiss }) {
     const [visible, setVisible] = useState(false);
     const [leaving, setLeaving] = useState(false);
 
-    useEffect(() => {
+    React.useEffect(() => {
         requestAnimationFrame(() => setVisible(true));
     }, []);
 
-    const dismiss = useCallback(() => {
+    const dismiss = React.useCallback(() => {
         setLeaving(true);
         setTimeout(() => onDismiss(id), 300);
     }, [id, onDismiss]);
 
-    useEffect(() => {
+    React.useEffect(() => {
         const t = setTimeout(dismiss, 5000);
         return () => clearTimeout(t);
     }, [dismiss]);
@@ -108,13 +107,13 @@ function ToastContainer({ toasts, onDismiss }) {
 
 function useToast() {
     const [toasts, setToasts] = useState([]);
-    const push = useCallback((type, title, message) => {
+    const push = React.useCallback((type, title, message) => {
         setToasts((prev) => [
             ...prev,
             { id: Date.now() + Math.random(), type, title, message },
         ]);
     }, []);
-    const dismiss = useCallback(
+    const dismiss = React.useCallback(
         (id) => setToasts((prev) => prev.filter((t) => t.id !== id)),
         [],
     );
@@ -226,7 +225,6 @@ const vConfirm = (p, c) =>
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SignupPage() {
-    const { setAuthUser } = useAuth();
     const { toasts, dismiss, toast } = useToast();
 
     const [role, setRole] = useState("student");
@@ -259,18 +257,6 @@ export default function SignupPage() {
         confirmPassword: "",
     });
     const [touched, setTouched] = useState({ student: {}, admin: {} });
-
-        const raw = localStorage.getItem(PENDING_KEY);
-        if (!raw) {
-            toast.error(
-                "Session expired",
-                "Please fill in the form again to register.",
-            );
-            return;
-        }
-
-        const pending = JSON.parse(raw);
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Validation helpers ────────────────────────────────────────────────────
     const getErrors = () => {
@@ -337,121 +323,105 @@ export default function SignupPage() {
     const handleStudentChange = change(setStudentData, "student");
     const handleAdminChange = change(setAdminData, "admin");
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-  const d = role === "student" ? studentData : adminData;
+        const d = role === "student" ? studentData : adminData;
 
-  const allTouched = Object.fromEntries(
-    Object.keys(d).map((f) => [f, true])
-  );
+        const allTouched = Object.fromEntries(
+            Object.keys(d).map((f) => [f, true]),
+        );
 
-  setTouched((p) => ({
-    ...p,
-    [role]: allTouched,
-  }));
+        setTouched((p) => ({
+            ...p,
+            [role]: allTouched,
+        }));
 
-  if (!isFormValid()) {
-    toast.error(
-      "Form incomplete",
-      "Please fix all errors before submitting."
-    );
-    return;
-  }
-
-  setIsLoading(true);
-
-  try {
-    const userCredential =
-      await createUserWithEmailAndPassword(
-        auth,
-        d.email.toLowerCase(),
-        d.password
-      );
-
-    await sendEmailVerification(
-      userCredential.user
-    );
-
-    const phoneNumber = parseInt(
-      (d.phone || "").replace(/\D/g, ""),
-      10
-    );
-
-    const userDocData = {
-      role,
-      email: d.email.toLowerCase(),
-      firstName: d.firstName.trim(),
-      lastName: d.lastName.trim(),
-      emailVerified: false,
-      ...(role === "student"
-        ? {
-            matricNo: d.matricNo.toUpperCase(),
-            phoneNumber,
-            dateOfBirth: d.dateOfBirth,
-          }
-        : {
-            schoolName: d.schoolName.trim(),
-            department: d.department.trim(),
-            adminId: d.adminId.toUpperCase(),
-            phoneNumber,
-          }),
-      createdAt: new Date(),
-    };
-
-    await setDoc(
-      doc(db, "users", userCredential.user.uid),
-      userDocData
-    );
-
-    if (role === "student") {
-      await setDoc(
-        doc(db, "students", userCredential.user.uid),
-        {
-          email: d.email.toLowerCase(),
-          firstName: d.firstName.trim(),
-          lastName: d.lastName.trim(),
-          matricNo: d.matricNo.toUpperCase(),
-          phoneNumber,
-          dateOfBirth: d.dateOfBirth,
-          examsTaken: [],
-          createdAt: new Date(),
-          status: "active",
-          statusHistory: [],
-          lastUpdated: new Date(),
+        if (!isFormValid()) {
+            toast.error(
+                "Form incomplete",
+                "Please fix all errors before submitting.",
+            );
+            return;
         }
-      );
-    }
 
-    toast.success(
-      "Verification email sent",
-      "Please check your inbox and verify your email before signing in."
-    );
+        setIsLoading(true);
 
-    setShowSuccessModal(true);
-  } catch (err) {
-    console.error(err);
+        try {
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                d.email.toLowerCase(),
+                d.password,
+            );
 
-    const msgs = {
-      "auth/email-already-in-use":
-        "This email is already registered.",
-      "auth/invalid-email":
-        "Please enter a valid email address.",
-      "auth/weak-password":
-        "Password is too weak.",
-      "auth/network-request-failed":
-        "Network error. Check your internet connection.",
+            await sendEmailVerification(userCredential.user);
+
+            const phoneNumber = parseInt((d.phone || "").replace(/\D/g, ""), 10);
+
+            const userDocData = {
+                role,
+                email: d.email.toLowerCase(),
+                firstName: d.firstName.trim(),
+                lastName: d.lastName.trim(),
+                emailVerified: false,
+                ...(role === "student"
+                    ? {
+                          matricNo: d.matricNo.toUpperCase(),
+                          phoneNumber,
+                          dateOfBirth: d.dateOfBirth,
+                      }
+                    : {
+                          schoolName: d.schoolName.trim(),
+                          department: d.department.trim(),
+                          adminId: d.adminId.toUpperCase(),
+                          phoneNumber,
+                      }),
+                createdAt: new Date(),
+            };
+
+            await setDoc(doc(db, "users", userCredential.user.uid), userDocData);
+
+            if (role === "student") {
+                await setDoc(doc(db, "students", userCredential.user.uid), {
+                    email: d.email.toLowerCase(),
+                    firstName: d.firstName.trim(),
+                    lastName: d.lastName.trim(),
+                    matricNo: d.matricNo.toUpperCase(),
+                    phoneNumber,
+                    dateOfBirth: d.dateOfBirth,
+                    examsTaken: [],
+                    createdAt: new Date(),
+                    status: "active",
+                    statusHistory: [],
+                    lastUpdated: new Date(),
+                });
+            }
+
+            toast.success(
+                "Verification email sent",
+                "Please check your inbox and verify your email before signing in.",
+            );
+
+            setShowSuccessModal(true);
+        } catch (err) {
+            console.error(err);
+
+            const msgs = {
+                "auth/email-already-in-use": "This email is already registered.",
+                "auth/invalid-email": "Please enter a valid email address.",
+                "auth/weak-password": "Password is too weak.",
+                "auth/network-request-failed":
+                    "Network error. Check your internet connection.",
+            };
+
+            toast.error(
+                "Registration failed",
+                msgs[err.code] || "Something went wrong. Please try again.",
+            );
+        } finally {
+            setIsLoading(false);
+        }
     };
-
-    toast.error(
-      "Registration failed",
-      msgs[err.code] ||
-        "Something went wrong. Please try again."
-    );
-  } finally {
-    setIsLoading(false);
-  }
-};
 
     // ── Password strength ─────────────────────────────────────────────────────
     const pwStrength = (pw) => {
@@ -478,20 +448,25 @@ const handleSubmit = async (e) => {
                 <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
                     <div className="text-center">
                         <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
-                            <CheckCircle className="h-10 w-10 text-green-600" />
+                            <Mail className="h-10 w-10 text-green-600" />
                         </div>
                         <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                            Account Created!
+                            Almost there, {currentData.firstName}!
                         </h3>
                         <p className="text-gray-600 mb-6">
-                            Welcome, {currentData.firstName}! Redirecting to
-                            your dashboard…
+                            We've sent a verification link to{" "}
+                            <span className="font-semibold">
+                                {currentData.email}
+                            </span>
+                            . Please check your inbox, then sign in once
+                            you've verified your email.
                         </p>
-                        <div className="flex items-center justify-center gap-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" />
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-100" />
-                            <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce delay-200" />
-                        </div>
+                        <Link
+                            href="/login"
+                            className="inline-block bg-green-900 hover:bg-green-800 text-white font-bold py-3 px-6 rounded-xl transition-colors"
+                        >
+                            Go to Sign In
+                        </Link>
                     </div>
                 </div>
             </div>
