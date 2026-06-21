@@ -17,11 +17,8 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import {
-    sendSignInLinkToEmail,
-    isSignInWithEmailLink,
-    signInWithEmailLink,
-    createUserWithEmailAndPassword,
-    updatePassword,
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
@@ -226,9 +223,6 @@ const vConfirm = (p, c) =>
           ? "Passwords do not match"
           : "";
 
-// localStorage key for pending registration data
-const PENDING_KEY = "examPortal_pendingRegistration";
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function SignupPage() {
@@ -237,9 +231,7 @@ export default function SignupPage() {
 
     const [role, setRole] = useState("student");
     const [isLoading, setIsLoading] = useState(false);
-    const [linkSent, setLinkSent] = useState(false); // waiting-for-click screen
     const [showSuccessModal, setShowSuccessModal] = useState(false);
-    const [isFinishing, setIsFinishing] = useState(false); // completing after link click
     const [showPassword, setShowPassword] = useState({
         password: false,
         confirmPassword: false,
@@ -268,10 +260,6 @@ export default function SignupPage() {
     });
     const [touched, setTouched] = useState({ student: {}, admin: {} });
 
-    // ── On mount: complete registration if returning from email link ──────────
-    useEffect(() => {
-        if (!isSignInWithEmailLink(auth, window.location.href)) return;
-
         const raw = localStorage.getItem(PENDING_KEY);
         if (!raw) {
             toast.error(
@@ -282,109 +270,7 @@ export default function SignupPage() {
         }
 
         const pending = JSON.parse(raw);
-        setIsFinishing(true);
-        finishRegistration(pending);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Complete registration after email link click ───────────────────────────
-    const finishRegistration = async (pending) => {
-        try {
-            // Use the magic link to get a Firebase credential, then immediately
-            // upgrade to email+password so the user can log in normally.
-            const { role, email, password, ...rest } = pending;
-
-            // Step 1 — sign in via the email link (proves they own the inbox)
-            const linkCredential = await signInWithEmailLink(
-                auth,
-                email,
-                window.location.href,
-            );
-            const firebaseUser = linkCredential.user;
-
-            // Step 2 — set a real password on the account
-            await updatePassword(firebaseUser, password);
-
-            // Step 3 — write Firestore documents
-            const phoneNumber = parseInt(
-                (rest.phone || "").replace(/\D/g, ""),
-                10,
-            );
-
-            const userDocData = {
-                role,
-                email,
-                firstName: rest.firstName.trim(),
-                lastName: rest.lastName.trim(),
-                emailVerified: true,
-                ...(role === "student"
-                    ? {
-                          matricNo: rest.matricNo.toUpperCase(),
-                          phoneNumber,
-                          dateOfBirth: rest.dateOfBirth,
-                      }
-                    : {
-                          schoolName: rest.schoolName.trim(),
-                          department: rest.department.trim(),
-                          adminId: rest.adminId.toUpperCase(),
-                          phoneNumber,
-                      }),
-                createdAt: new Date(),
-            };
-            await setDoc(doc(db, "users", firebaseUser.uid), userDocData);
-
-            if (role === "student") {
-                await setDoc(doc(db, "students", firebaseUser.uid), {
-                    email,
-                    firstName: rest.firstName.trim(),
-                    lastName: rest.lastName.trim(),
-                    matricNo: rest.matricNo.toUpperCase(),
-                    phoneNumber,
-                    dateOfBirth: rest.dateOfBirth,
-                    examsTaken: [],
-                    createdAt: new Date(),
-                    status: "active",
-                    statusHistory: [],
-                    lastUpdated: new Date(),
-                });
-            }
-
-            localStorage.removeItem(PENDING_KEY);
-
-            const authUser = {
-                uid: firebaseUser.uid,
-                firstName: rest.firstName.trim(),
-                lastName: rest.lastName.trim(),
-                email,
-                role,
-                ...(role === "student"
-                    ? {
-                          matricNo: rest.matricNo.toUpperCase(),
-                          dateOfBirth: rest.dateOfBirth,
-                      }
-                    : {
-                          schoolName: rest.schoolName.trim(),
-                          department: rest.department.trim(),
-                          adminId: rest.adminId.toUpperCase(),
-                      }),
-            };
-
-            setShowSuccessModal(true);
-            toast.success(
-                "Account created!",
-                `Welcome, ${rest.firstName}! Redirecting…`,
-            );
-            setTimeout(() => setAuthUser(authUser), 2000);
-        } catch (err) {
-            console.error("Finish registration error:", err);
-            localStorage.removeItem(PENDING_KEY);
-            toast.error(
-                "Registration failed",
-                err.message ?? "Please try registering again.",
-            );
-        } finally {
-            setIsFinishing(false);
-        }
-    };
 
     // ── Validation helpers ────────────────────────────────────────────────────
     const getErrors = () => {
@@ -451,63 +337,121 @@ export default function SignupPage() {
     const handleStudentChange = change(setStudentData, "student");
     const handleAdminChange = change(setAdminData, "admin");
 
-    // ── Submit: save to localStorage, send magic link ─────────────────────────
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const d = role === "student" ? studentData : adminData;
-        const allTouched = Object.fromEntries(
-            Object.keys(d).map((f) => [f, true]),
-        );
-        setTouched((p) => ({ ...p, [role]: allTouched }));
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-        if (!isFormValid()) {
-            toast.error(
-                "Form incomplete",
-                "Please fix all errors before submitting.",
-            );
-            return;
-        }
+  const d = role === "student" ? studentData : adminData;
 
-        setIsLoading(true);
-        try {
-            // Persist form data — we'll retrieve it when they return from the link
-            localStorage.setItem(PENDING_KEY, JSON.stringify({ role, ...d }));
+  const allTouched = Object.fromEntries(
+    Object.keys(d).map((f) => [f, true])
+  );
 
-            const actionCodeSettings = {
-                url: window.location.href, // return to this same page
-                handleCodeInApp: true,
-            };
+  setTouched((p) => ({
+    ...p,
+    [role]: allTouched,
+  }));
 
-            await sendSignInLinkToEmail(
-                auth,
-                d.email.toLowerCase(),
-                actionCodeSettings,
-            );
-            setLinkSent(true);
-            toast.info(
-                "Check your inbox",
-                `A sign-up link was sent to ${d.email}`,
-            );
-        } catch (err) {
-            console.error("sendSignInLinkToEmail error:", err);
-            localStorage.removeItem(PENDING_KEY);
-            const msgs = {
-                "auth/invalid-email": "Please enter a valid email address.",
-                "auth/network-request-failed":
-                    "Network error. Check your internet connection.",
-                "auth/too-many-requests":
-                    "Too many attempts. Please wait and try again.",
-                "auth/email-already-in-use":
-                    "This email is already registered. Please sign in.",
-            };
-            toast.error(
-                "Failed to send link",
-                msgs[err.code] ?? "Something went wrong. Please try again.",
-            );
-        } finally {
-            setIsLoading(false);
-        }
+  if (!isFormValid()) {
+    toast.error(
+      "Form incomplete",
+      "Please fix all errors before submitting."
+    );
+    return;
+  }
+
+  setIsLoading(true);
+
+  try {
+    const userCredential =
+      await createUserWithEmailAndPassword(
+        auth,
+        d.email.toLowerCase(),
+        d.password
+      );
+
+    await sendEmailVerification(
+      userCredential.user
+    );
+
+    const phoneNumber = parseInt(
+      (d.phone || "").replace(/\D/g, ""),
+      10
+    );
+
+    const userDocData = {
+      role,
+      email: d.email.toLowerCase(),
+      firstName: d.firstName.trim(),
+      lastName: d.lastName.trim(),
+      emailVerified: false,
+      ...(role === "student"
+        ? {
+            matricNo: d.matricNo.toUpperCase(),
+            phoneNumber,
+            dateOfBirth: d.dateOfBirth,
+          }
+        : {
+            schoolName: d.schoolName.trim(),
+            department: d.department.trim(),
+            adminId: d.adminId.toUpperCase(),
+            phoneNumber,
+          }),
+      createdAt: new Date(),
     };
+
+    await setDoc(
+      doc(db, "users", userCredential.user.uid),
+      userDocData
+    );
+
+    if (role === "student") {
+      await setDoc(
+        doc(db, "students", userCredential.user.uid),
+        {
+          email: d.email.toLowerCase(),
+          firstName: d.firstName.trim(),
+          lastName: d.lastName.trim(),
+          matricNo: d.matricNo.toUpperCase(),
+          phoneNumber,
+          dateOfBirth: d.dateOfBirth,
+          examsTaken: [],
+          createdAt: new Date(),
+          status: "active",
+          statusHistory: [],
+          lastUpdated: new Date(),
+        }
+      );
+    }
+
+    toast.success(
+      "Verification email sent",
+      "Please check your inbox and verify your email before signing in."
+    );
+
+    setShowSuccessModal(true);
+  } catch (err) {
+    console.error(err);
+
+    const msgs = {
+      "auth/email-already-in-use":
+        "This email is already registered.",
+      "auth/invalid-email":
+        "Please enter a valid email address.",
+      "auth/weak-password":
+        "Password is too weak.",
+      "auth/network-request-failed":
+        "Network error. Check your internet connection.",
+    };
+
+    toast.error(
+      "Registration failed",
+      msgs[err.code] ||
+        "Something went wrong. Please try again."
+    );
+  } finally {
+    setIsLoading(false);
+  }
+};
 
     // ── Password strength ─────────────────────────────────────────────────────
     const pwStrength = (pw) => {
@@ -526,80 +470,6 @@ export default function SignupPage() {
 
     const currentData = role === "student" ? studentData : adminData;
     const strength = pwStrength(currentData.password);
-
-    // ── Finishing-up overlay (shown while creating account post-link-click) ───
-    if (isFinishing)
-        return (
-            <>
-                <ToastContainer toasts={toasts} onDismiss={dismiss} />
-                <main className="grow flex items-center justify-center min-h-screen bg-green-50">
-                    <div className="text-center">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4 animate-pulse">
-                            <CheckCircle className="h-8 w-8 text-green-600" />
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-2">
-                            Completing your registration…
-                        </h3>
-                        <p className="text-gray-500 text-sm">
-                            Please wait a moment.
-                        </p>
-                    </div>
-                </main>
-            </>
-        );
-
-    // ── Waiting-for-click screen ──────────────────────────────────────────────
-    if (linkSent)
-        return (
-            <>
-                <ToastContainer toasts={toasts} onDismiss={dismiss} />
-                <main className="grow flex items-center justify-center min-h-screen bg-green-50 px-4">
-                    <div className="bg-white rounded-2xl shadow-2xl p-10 max-w-md w-full text-center">
-                        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-6">
-                            <Mail className="h-8 w-8 text-green-600" />
-                        </div>
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                            Check your inbox
-                        </h3>
-                        <p className="text-gray-500 text-sm mb-1">
-                            We sent a sign-up link to
-                        </p>
-                        <p className="text-green-900 font-semibold mb-6">
-                            {currentData.email}
-                        </p>
-                        <p className="text-gray-500 text-sm mb-8">
-                            Click the link in that email to verify your address
-                            and finish creating your account.
-                            <br />
-                            <span className="font-medium text-gray-700">
-                                Your account will only be created after you
-                                click the link.
-                            </span>
-                        </p>
-
-                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-left mb-6">
-                            <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                                Can&apos;t find the email?
-                            </h4>
-                            <ul className="text-xs text-blue-800 space-y-1">
-                                <li>• Check your spam or junk folder</li>
-                                <li>
-                                    • Make sure you entered the correct email
-                                </li>
-                                <li>• Wait a few minutes and check again</li>
-                            </ul>
-                        </div>
-
-                        <button
-                            onClick={() => setLinkSent(false)}
-                            className="text-sm text-green-900 font-semibold hover:underline"
-                        >
-                            ← Use a different email
-                        </button>
-                    </div>
-                </main>
-            </>
-        );
 
     // ── Success modal ─────────────────────────────────────────────────────────
     const SuccessModal = () =>
